@@ -3,6 +3,11 @@
 
 require_once __DIR__.'/auth.php';
 requireLogin();
+if (!isAdminLoja()) {
+    http_response_code(403);
+    header('Location: /dashboard.php');
+    exit('Acesso negado.');
+}
 
 require_once __DIR__.'/db.php';
 
@@ -17,11 +22,6 @@ if ($tid <= 0) {
     http_response_code(400);
     echo 'Tenant inválido.';
     exit;
-}
-
-if (hasRole('ATENDENTE')) {
-    http_response_code(403);
-    exit('Acesso negado.');
 }
 
 // ===== Carrega config existente =====

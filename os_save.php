@@ -6,21 +6,25 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require_once __DIR__.'/db.php';
-
-// tenta carregar auth.php (se existir)
-$authFile = __DIR__.'/auth.php';
-if (file_exists($authFile)) require_once $authFile;
+require_once __DIR__.'/auth.php';
 
 // garante sessão
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
+requireLogin();
 
 $pdo = db();
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  http_response_code(405);
+  exit('Método inválido.');
+}
+
 // ===== FALLBACKS: tenantId() / userId() =====
 $tid = function_exists('tenantId') ? (int)tenantId() : (int)($_SESSION['tenant_id'] ?? 0);
-$uid = function_exists('userId')   ? (int)userId()   : (int)($_SESSION['user_id']   ?? 0);
+$uid = (int)($_SESSION['USER_ID'] ?? $_SESSION['user_id'] ?? (function_exists('userId') ? userId() : 0));
 
 if ($tid <= 0) { http_response_code(400); exit('Tenant inválido.'); }
+if ($uid <= 0) { http_response_code(401); exit('Usuário inválido.'); }
 
 // -------- helpers --------
 function brToFloat($v){
@@ -53,6 +57,17 @@ $status_financeiro = trim((string)($_POST['status_financeiro'] ?? 'pendente'));
 $valor_pago        = brToFloat($_POST['valor_pago'] ?? 0);
 $data_pagto_raw    = trim((string)($_POST['data_pagto'] ?? '')); // YYYY-MM-DD ou vazio
 
+if ($id < 0) { http_response_code(400); exit('ID inválido.'); }
+if ($garantia_dias < 0) { $garantia_dias = 0; }
+if ($status === '') { $status = 'aberta'; }
+if ($prioridade === '') { $prioridade = 'baixa'; }
+if (strlen($tecnico) > 120) { $tecnico = substr($tecnico, 0, 120); }
+if ($desconto < 0) { $desconto = 0; }
+if ($acrescimo < 0) { $acrescimo = 0; }
+if ($total < 0) { $total = 0; }
+if ($valor_mao_obra < 0) { $valor_mao_obra = 0; }
+if ($valor_pago < 0) { $valor_pago = 0; }
+
 if ($status_financeiro === '') {
     $status_financeiro = 'pendente';
 }
@@ -77,12 +92,22 @@ if ($status_financeiro === 'pago') {
     $data_pagto = ($data_pagto_raw !== '') ? $data_pagto_raw : null;
 }
 
+if ($data_pagto_raw !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_pagto_raw)) {
+  http_response_code(400);
+  exit('Data de pagamento inválida.');
+}
+
 // Itens
 $item_tipo = $_POST['item_tipo'] ?? [];
 $item_ref  = $_POST['item_ref']  ?? [];
 $item_desc = $_POST['item_desc'] ?? [];
 $item_qtd  = $_POST['item_qtd']  ?? [];
 $item_vu   = $_POST['item_vu']   ?? [];
+if (!is_array($item_tipo)) $item_tipo = [];
+if (!is_array($item_ref))  $item_ref  = [];
+if (!is_array($item_desc)) $item_desc = [];
+if (!is_array($item_qtd))  $item_qtd  = [];
+if (!is_array($item_vu))   $item_vu   = [];
 
 if ($cliente_id <= 0) { http_response_code(400); exit('Cliente obrigatório.'); }
 
@@ -132,11 +157,15 @@ try {
         ':mao'=>$valor_mao_obra, ':def'=>$defeito, ':lau'=>$laudo,
         ':desc'=>$desconto, ':acr'=>$acrescimo, ':tot'=>$total,
         ':fp'=>$forma_pagto, ':vp'=>$valor_pago, ':dp'=>$data_pagto, ':sf'=>$status_financeiro,
-        ':uid'=>($uid ?: null),
+        ':uid'=>$uid,
       ]);
       $id = (int)$pdo->lastInsertId();
     } catch (Throwable $e) {
-      // fallback: sem created_by
+      // fallback: sem created_by (apenas quando a coluna não existir)
+      $msg = strtolower((string)$e->getMessage());
+      if (strpos($msg, 'created_by') === false && strpos($msg, 'unknown column') === false) {
+        throw $e;
+      }
       $sql = "INSERT INTO hf_os
                 (tenant_id, cliente_id, status, prioridade, tecnico,
                  valor_mao_obra, defeito, laudo, desconto, acrescimo, total,
@@ -296,7 +325,7 @@ try {
       }
   } catch (Throwable $eFin) {
       // não quebra o salvamento da OS se der erro no financeiro
-      // se quiser debugar: echo 'Erro financeiro: '.$eFin->getMessage();
+      error_log('os_save.php financeiro sync: '.$eFin->getMessage());
   }
   // ===== FIM FINANCEIRO OS =====
 
@@ -390,8 +419,11 @@ try {
   exit;
 
 } catch(Throwable $e){
-  $pdo->rollBack();
+  if ($pdo->inTransaction()) {
+    $pdo->rollBack();
+  }
   http_response_code(500);
+  error_log('os_save.php fatal: '.$e->getMessage());
   echo '<pre>Erro ao salvar OS: '.$e->getMessage().'</pre>';
   exit;
 }

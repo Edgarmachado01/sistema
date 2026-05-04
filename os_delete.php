@@ -5,8 +5,16 @@ require_once __DIR__.'/db.php';
 
 $pdo = db();
 $tid = tenantId();
-$id  = (int)($_GET['id'] ?? 0);
-if (!$tid || $id<=0) { header('Location: /os_list.php'); exit; }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  header('Location: /os_list.php');
+  exit;
+}
+
+$id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+if (!$tid || !$id) {
+  header('Location: /os_list.php');
+  exit;
+}
 
 $st = $pdo->prepare("UPDATE hf_os SET deleted_at=NOW() WHERE id=:id AND tenant_id=:tid AND deleted_at IS NULL");
 $st->execute([':id'=>$id, ':tid'=>$tid]);
