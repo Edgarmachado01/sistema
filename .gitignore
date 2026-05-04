@@ -6,4 +6,4 @@ conexao.php
 *.rar
 /vendor/
 node_modules/
-.git
+uploads/
