@@ -1,0 +1,282 @@
+/* ===== Tokens ===== */
+:root{
+  --brand: var(--bs-primary);
+  --brand-rgb: var(--bs-primary-rgb);
+  --card-radius: 18px;
+  /* Sombra mais suave para o card */
+  --card-shadow: 0 4px 12px rgba(0,0,0,.06);
+  /* Sombra mais intensa no hover */
+  --card-shadow-hover: 0 12px 32px rgba(0,0,0,.15);
+  --border-soft: 1px solid rgba(0,0,0,.06);
+  --topbar-h: 56px;
+
+  /* Degradês para sidebar */
+  --g-brand: linear-gradient(135deg,
+    rgba(var(--bs-primary-rgb), 1) 0%, /* 100% opacidade no início */
+    rgba(var(--bs-primary-rgb), .85) 100%); /* 85% opacidade no final */
+  --g-hover: linear-gradient(90deg,
+    rgba(var(--bs-primary-rgb), .15) 0%,
+    rgba(var(--bs-primary-rgb), .08) 100%);
+}
+[data-bs-theme="dark"]{
+  --card-shadow: 0 4px 12px rgba(0,0,0,.45);
+  --card-shadow-hover: 0 12px 32px rgba(0,0,0,.6);
+  --border-soft: 1px solid rgba(255,255,255,.06);
+  --g-hover: linear-gradient(90deg,
+    rgba(var(--bs-primary-rgb), .30) 0%,
+    rgba(var(--bs-primary-rgb), .15) 100%);
+}
+
+/* ===== Topbar (degradê) ===== */
+.hf-topbar{
+  /* Mantém o degradê suave e o blur */
+  background: linear-gradient(180deg,
+    rgba(var(--brand-rgb), .96) 0%,
+    rgba(var(--brand-rgb), .88) 100%) !important;
+  backdrop-filter: saturate(140%) blur(6px);
+  /* Sombra leve para diferenciar */
+  box-shadow: 0 2px 12px rgba(0,0,0,.15);
+}
+.hf-topbar .btn-hamb{ border-radius:10px; }
+.hf-topbar .btn-hamb:active{ transform: scale(.98); }
+
+/* ===== Sidebar ===== */
+.hf-sidebar{
+  width:240px; min-height:100vh; background:var(--bs-body-bg);
+  /* Adiciona sombra sutil na borda direita em desktop */
+  box-shadow: 2px 0 8px rgba(0,0,0,.05); 
+  border-right: var(--border-soft); transition: width .18s ease;
+}
+[data-bs-theme="dark"] .hf-sidebar {
+  box-shadow: 2px 0 8px rgba(0,0,0,.2);
+}
+
+.hf-sidebar .nav{ padding:.6rem .4rem 1rem; }
+.hf-sidebar .section{
+  font-size:.78rem; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--bs-secondary-color); padding:.75rem .9rem .35rem;
+}
+.hf-sidebar .nav-link{
+  display:flex; align-items:center; gap:.75rem;
+  padding:.62rem .85rem; border-radius:14px; margin:.12rem .5rem;
+  color:var(--bs-body-color); position:relative; overflow:hidden;
+}
+.hf-sidebar .nav-link:hover{ background: var(--g-hover); }
+.hf-sidebar .nav-link.active{
+  color:#fff; 
+  background: var(--g-brand); /* Usa o degradê mais intenso */
+  /* Sombra mais forte para o item ativo */
+  box-shadow: 0 6px 16px rgba(var(--bs-primary-rgb), .35);
+}
+.hf-sidebar .nav-link.active::before{
+  content:""; position:absolute; left:8px; top:50%; transform:translateY(-50%);
+  width:4px; height:60%; border-radius:6px; background:#fff; opacity:.85;
+}
+
+/* Ícone em pílula */
+.hf-ico{
+  width:34px; height:34px; border-radius:10px; display:grid; place-items:center;
+  background: rgba(var(--bs-primary-rgb), .12); color:var(--bs-primary);
+  flex:0 0 34px; transition: transform .12s ease;
+}
+.hf-sidebar .nav-link:hover .hf-ico{ transform: translateY(-1px); }
+.hf-sidebar .nav-link.active .hf-ico{ background: rgba(255,255,255,.18); color:#fff; }
+
+/* Conteúdo */
+.hf-content{ flex:1; min-width:0; padding:1.25rem 1.5rem 2rem; }
+
+/* Switcher (tema/cores) */
+.hf-switcher{
+  position: fixed; right: 1rem; top: calc(var(--topbar-h) + 12px); z-index: 1030;
+  width: 230px; border: var(--border-soft); border-radius: 14px;
+  background: var(--bs-body-bg); box-shadow: var(--card-shadow); padding: .85rem; display: none;
+}
+.hf-switcher.show{ display:block; }
+.hf-swatch{ width:18px; height:18px; border-radius:100%; display:inline-block; margin-right:.5rem; border:1px solid rgba(0,0,0,.1); }
+
+/* Cards padrão (opcional para seus KPIs) */
+.hf-card{
+  border: var(--border-soft);
+  background: var(--bs-body-bg);
+  border-radius: var(--card-radius);
+  /* Usa a sombra mais suave */
+  box-shadow: var(--card-shadow);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+/* Usa a sombra mais intensa no hover */
+.hf-card:hover{ transform: translateY(-2px); box-shadow: var(--card-shadow-hover); }
+
+
+/*
+ * Estilos para os Cards KPI (Key Performance Indicators)
+ * Inclui ajustes para um visual delicado, tipografia refinada e cores de contexto.
+ */
+
+/* Estilos de base para o KPI (card) */
+.hf-kpi {
+  padding: 1.5rem; /* Mais padding vertical para 'respirar' */
+  border: none;
+}
+.hf-kpi .kpi-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.6rem; /* Mais delicado */
+}
+.hf-kpi .kpi-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+.hf-kpi .kpi-value {
+  font-size: 1.75rem; /* Fonte menor e mais delicada */
+  font-weight: 700;
+  line-height: 1;
+  color: var(--bs-heading-color);
+}
+.hf-kpi .kpi-sub {
+  font-size: 0.8rem; /* Fonte secundária menor */
+  color: var(--bs-secondary-color);
+  margin-top: 0.1rem; /* Espaço reduzido */
+}
+
+/* Estilo do Ícone (círculo perfeito) */
+.hf-kpi .kpi-icon {
+  width: 50px;
+  height: 50px;
+  min-width: 50px; 
+  border-radius: 50%; /* Círculo Perfeito */
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem; /* Ícone levemente maior para balanço */
+  transition: all 0.2s ease;
+
+  /* Cor Padrão (usa a cor principal se não houver contexto) */
+  background: rgba(var(--bs-primary-rgb), .12);
+  color: var(--bs-primary);
+}
+
+/* Efeito no Hover (mais suave) */
+.hf-card:hover .kpi-icon {
+  background: var(--bs-primary);
+  color: #fff;
+  transform: translateY(-1px); /* Menos levantamento */
+  box-shadow: 0 2px 6px rgba(var(--bs-primary-rgb), .2); /* Sombra mais suave */
+}
+
+
+/* ESTILOS DE PROGRESSO */
+.hf-progress {
+  height: 3px; /* Barra de progresso mais fina e delicada */
+  background: rgba(var(--bs-secondary-rgb), .15);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 1.25rem;
+}
+.hf-progress .bar {
+  height: 100%;
+  width: 0;
+  background: var(--bs-primary); /* Padrão: cor principal */
+  transition: width 0.4s ease;
+  border-radius: 4px;
+}
+
+
+/* ================================== */
+/* CORES DE CONTEXTO (kpi-danger, kpi-success, etc.) */
+/* ================================== */
+
+/* KPI DANGER (vermelho) */
+.hf-kpi.kpi-danger .kpi-icon {
+  background: rgba(220, 53, 69, .12);
+  color: var(--bs-danger);
+}
+.hf-kpi.kpi-danger .hf-progress .bar {
+  background: var(--bs-danger);
+}
+.hf-kpi.kpi-danger:hover .kpi-icon {
+  background: var(--bs-danger);
+  color: #fff;
+}
+
+/* KPI SUCCESS (verde) */
+.hf-kpi.kpi-success .kpi-icon {
+  background: rgba(25, 135, 84, .12);
+  color: var(--bs-success);
+}
+.hf-kpi.kpi-success .hf-progress .bar {
+  background: var(--bs-success);
+}
+.hf-kpi.kpi-success:hover .kpi-icon {
+  background: var(--bs-success);
+  color: #fff;
+}
+
+/* KPI WARNING (amarelo/laranja) */
+.hf-kpi.kpi-warning .kpi-icon {
+  background: rgba(255, 193, 7, .12);
+  color: var(--bs-warning);
+}
+.hf-kpi.kpi-warning .hf-progress .bar {
+  background: var(--bs-warning);
+}
+.hf-kpi.kpi-warning:hover .kpi-icon {
+  background: var(--bs-warning);
+  color: #111; /* Preto para contraste no amarelo */
+}
+
+
+/* ===== Mobile: sidebar como overlay + Colapso Total Desktop ===== */
+@media (max-width: 991.98px){
+  .hf-sidebar{
+    position: fixed;
+    top: var(--topbar-h);
+    left: -260px;
+    height: calc(100vh - var(--topbar-h));
+    width: 240px;
+    z-index: 1045;
+    box-shadow: 0 16px 40px rgba(0,0,0,.25);
+    border-right: none;
+    background: var(--bs-body-bg);
+    transition: left .2s ease;
+  }
+  body.sidebar-open .hf-sidebar{ left: 0; }
+
+  .hf-backdrop{ display: none; }
+  body.sidebar-open .hf-backdrop{
+    display: block;
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    background: rgba(0,0,0,.35);
+    backdrop-filter: blur(1px);
+    z-index: 1040;
+  }
+
+  body.sidebar-open{ overflow: hidden; }
+
+  /* no mobile, ignore 'sidebar-collapsed' */
+  body.sidebar-collapsed .hf-sidebar{ width:240px; }
+}
+
+/* Correção para colapso: opcional para esconder totalmente */
+@media (min-width: 992px) {
+  /* No modo colapsado, a sidebar fica com uma largura minima ou zero */
+  body.sidebar-collapsed .hf-sidebar {
+    width: 0px;
+    padding: 0;
+    min-width: 0;
+    overflow: hidden; /* Garante que nada vaze */
+  }
+
+  /* No modo colapsado, o conteúdo ocupa 100% da largura disponível */
+  body.sidebar-collapsed .hf-content {
+    width: 100%;
+    flex: 1 1 100%; /* Força a ocupar todo o espaço */
+  }
+
+  /* Esconde o texto dentro do link, deixando apenas o ícone */
+  body.sidebar-collapsed .hf-sidebar .nav-link span {
+    display: none;
+  }
+}
