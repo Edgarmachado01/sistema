@@ -132,234 +132,276 @@ if ($os && !empty($os['garantia_ate'])) {
   <form class="hf-card p-3" method="post" action="/os_save.php" id="osForm" enctype="multipart/form-data">
     <input type="hidden" name="id" value="<?= (int)$id ?>">
 
-    <!-- Cabeçalho -->
-    <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label">Cliente*</label>
-        <div class="input-group">
-          <select class="form-select" name="cliente_id" id="cliSelect" required>
-            <option value="">Selecione...</option>
-            <?php foreach($clientes as $c): ?>
-              <option value="<?= (int)$c['id'] ?>"
-                      data-garantia="<?= (int)($c['default_garantia_dias'] ?? 0) ?>"
-                      <?= $os && (int)$os['cliente_id']===(int)$c['id'] ? 'selected':'' ?>>
-                <?= htmlspecialchars($c['nome']) ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-          <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#modalCliente" title="Cadastrar cliente">
-            <i class="bi bi-person-plus"></i>
-          </button>
+    <!-- Cliente -->
+    <div class="card mb-3">
+      <div class="card-header">
+        <strong>Cliente</strong>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Cliente*</label>
+            <div class="input-group">
+              <select class="form-select" name="cliente_id" id="cliSelect" required>
+                <option value="">Selecione...</option>
+                <?php foreach($clientes as $c): ?>
+                  <option value="<?= (int)$c['id'] ?>"
+                          data-garantia="<?= (int)($c['default_garantia_dias'] ?? 0) ?>"
+                          <?= $os && (int)$os['cliente_id']===(int)$c['id'] ? 'selected':'' ?>>
+                    <?= htmlspecialchars($c['nome']) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+              <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#modalCliente" title="Cadastrar cliente">
+                <i class="bi bi-person-plus"></i>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Status</label>
-        <select class="form-select" name="status">
-          <?php foreach(['aberta','em_andamento','concluida','cancelada'] as $s): ?>
-            <option value="<?= $s ?>" <?= $os && $os['status']===$s ? 'selected':'' ?>><?= ucfirst(str_replace('_',' ',$s)) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Prioridade</label>
-        <select class="form-select" name="prioridade">
-          <?php foreach(['baixa','media','alta'] as $p): ?>
-            <option value="<?= $p ?>" <?= $os && $os['prioridade']===$p ? 'selected':'' ?>><?= ucfirst($p) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Técnico</label>
-        <input class="form-control" name="tecnico" maxlength="120" value="<?= htmlspecialchars($os['tecnico'] ?? '') ?>">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Garantia (dias)</label>
-        <div class="input-group">
-          <input type="number" min="0" step="1" class="form-control" name="garantia_dias" id="garantiaDias"
-                 value="<?= htmlspecialchars($garantiaDiasEdit) ?>">
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="15">15</button>
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="30">30</button>
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="60">60</button>
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="90">90</button>
-        </div>
-        <small class="text-muted">A data final será calculada automaticamente.</small>
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Valor mão de obra (R$)</label>
-        <input class="form-control" name="valor_mao_obra" value="<?= number_format((float)($os['valor_mao_obra'] ?? 0),2,',','.') ?>">
-      </div>
-
-      <div class="col-12">
-        <label class="form-label">Defeito reclamado</label>
-        <textarea class="form-control" name="defeito" rows="2"><?= htmlspecialchars($os['defeito'] ?? '') ?></textarea>
-      </div>
-      <div class="col-12">
-        <label class="form-label">Laudo / Observações</label>
-        <textarea class="form-control" name="laudo" rows="2"><?= htmlspecialchars($os['laudo'] ?? '') ?></textarea>
       </div>
     </div>
 
-    <!-- Fotos do produto -->
-    <hr class="my-3">
+    <!-- Execução -->
     <div class="card mb-3">
-      <div class="card-header d-flex align-items-center justify-content-between">
-        <span>Fotos do produto (estado de chegada)</span>
-        <?php if ($id>0): ?>
-          <small class="text-muted">Upload instantâneo — limite 2 MB por foto.</small>
-        <?php else: ?>
-          <small class="text-muted">Salve a OS primeiro para habilitar consulta das fotos.</small>
-        <?php endif; ?>
+      <div class="card-header">
+        <strong>Execução</strong>
       </div>
       <div class="card-body">
-        <?php if ($id>0): ?>
-          <!-- Uploader assíncrono -->
-          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <label class="btn btn-primary btn-sm mb-0" for="fotoAsync">
-              <i class="bi bi-camera"></i> Tirar foto / Anexar
-            </label>
-            <input type="file" id="fotoAsync" accept="image/*" capture="environment" multiple style="display:none"
-                   data-os-id="<?= (int)$id ?>">
-            <button type="button"
-                    id="btnVerFotos"
-                    class="btn btn-outline-secondary btn-sm"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalFotos">
-              <i class="bi bi-images"></i>
-              Ver fotos (<span id="fotoCount"><?= $fotosQtde ?></span>)
-            </button>
-            <small class="text-muted d-block d-md-inline">
-              Máx 10 imagens por envio, até 2 MB cada (JPG/PNG/GIF).
-            </small>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+              <?php foreach(['aberta','em_andamento','concluida','cancelada'] as $s): ?>
+                <option value="<?= $s ?>" <?= $os && $os['status']===$s ? 'selected':'' ?>><?= ucfirst(str_replace('_',' ',$s)) ?></option>
+              <?php endforeach; ?>
+            </select>
           </div>
-          <div id="uploadMsg" class="small text-muted"></div>
-        <?php else: ?>
-          <!-- Fallback para OS nova (sem id ainda) -->
-          <p class="text-muted mb-2">
-            No celular, você pode tirar foto direto da câmera. As imagens serão salvas ao clicar em <b>Salvar</b>.
-          </p>
-          <div class="d-flex align-items-center gap-2 mb-2">
-            <label class="btn btn-primary btn-sm mb-0" for="fotos">
-              <i class="bi bi-camera"></i> Tirar foto / Anexar
-            </label>
-            <input type="file" id="fotos" name="fotos[]" accept="image/*" capture="environment" multiple style="display:none">
-            <small class="text-muted">Máx 10 imagens, até 2 MB cada. JPG/PNG/GIF.</small>
+
+          <div class="col-md-3">
+            <label class="form-label">Prioridade</label>
+            <select class="form-select" name="prioridade">
+              <?php foreach(['baixa','media','alta'] as $p): ?>
+                <option value="<?= $p ?>" <?= $os && $os['prioridade']===$p ? 'selected':'' ?>><?= ucfirst($p) ?></option>
+              <?php endforeach; ?>
+            </select>
           </div>
-          <div id="preview" class="d-flex flex-wrap" style="gap:10px"></div>
-        <?php endif; ?>
+
+          <div class="col-md-4">
+            <label class="form-label">Técnico</label>
+            <input class="form-control" name="tecnico" maxlength="120" value="<?= htmlspecialchars($os['tecnico'] ?? '') ?>">
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Defeito reclamado</label>
+            <textarea class="form-control" name="defeito" rows="2"><?= htmlspecialchars($os['defeito'] ?? '') ?></textarea>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Laudo / Observações</label>
+            <textarea class="form-control" name="laudo" rows="2"><?= htmlspecialchars($os['laudo'] ?? '') ?></textarea>
+          </div>
+
+          <div class="col-md-5 col-lg-4">
+            <label class="form-label">Garantia (dias)</label>
+            <div class="input-group">
+              <input type="number" min="0" step="1" class="form-control" name="garantia_dias" id="garantiaDias"
+                     value="<?= htmlspecialchars($garantiaDiasEdit) ?>">
+              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="15">15</button>
+              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="30">30</button>
+              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="60">60</button>
+              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="90">90</button>
+            </div>
+            <small class="text-muted">A data final será calculada automaticamente.</small>
+          </div>
+
+          <input type="hidden" name="valor_mao_obra" value="0,00">
+        </div>
       </div>
     </div>
 
     <!-- Itens -->
-    <hr class="my-3">
-    <div class="d-flex align-items-center mb-2" id="itensActions">
-      <h6 class="mb-0">Itens</h6>
-      <div class="ms-auto d-flex gap-2">
-        <button type="button" class="btn btn-primary btn-sm" id="addProd">
-          <i class="bi bi-plus-lg"></i> Produto
-        </button>
-        <button type="button" class="btn btn-success btn-sm" id="addServ">
-          <i class="bi bi-plus-lg"></i> Serviço
-        </button>
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center">
+        <strong>Itens</strong>
+        <div class="ms-auto d-flex gap-2">
+          <button type="button" class="btn btn-primary btn-sm" id="addProd">
+            <i class="bi bi-plus-lg"></i> Produto
+          </button>
+          <button type="button" class="btn btn-success btn-sm" id="addServ">
+            <i class="bi bi-plus-lg"></i> Serviço
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-2" id="itensActions">
+          <h6 class="mb-0">Produtos e serviços da OS</h6>
+        </div>
+
+        <div class="table-responsive itens-responsive">
+          <table class="table table-sm align-middle" id="itensTable">
+            <thead class="table-light">
+              <tr>
+                <th style="width:110px">Tipo</th>
+                <th>Ref.</th>
+                <th>Descrição</th>
+                <th style="width:110px" class="text-end">Qtd</th>
+                <th style="width:140px" class="text-end">Vlr Unit (R$)</th>
+                <th style="width:140px" class="text-end">Total (R$)</th>
+                <th style="width:70px"></th>
+              </tr>
+            </thead>
+            <tbody id="itensBody">
+              <?php if (empty($itens)): ?>
+                <tr id="emptyRow">
+                  <td colspan="7" class="text-center text-muted py-3">
+                    Nenhum item. Use <b>+ Produto</b> ou <b>+ Serviço</b>.
+                  </td>
+                </tr>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!-- Financeiro -->
+    <div class="card mb-3">
+      <div class="card-header">
+        <strong>Financeiro</strong>
+      </div>
+      <div class="card-body">
+        <!-- Totais -->
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Desconto (R$)</label>
+            <input class="form-control" name="desconto"
+                   value="<?= number_format((float)($os['desconto'] ?? 0),2,',','.') ?>">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Acréscimo (R$)</label>
+            <input class="form-control" name="acrescimo"
+                   value="<?= number_format((float)($os['acrescimo'] ?? 0),2,',','.') ?>">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Total (R$)</label>
+            <input class="form-control" name="total" id="totalGeral" readonly
+                   value="<?= number_format((float)($os['total'] ?? 0),2,',','.') ?>">
+          </div>
+        </div>
+
+        <hr class="my-3">
+
+        <!-- Pagamento -->
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Status financeiro</label>
+            <select class="form-select" name="status_financeiro">
+              <?php
+                $sf = $os['status_financeiro'] ?? 'pendente';
+                foreach (['pendente'=>'Pendente','parcial'=>'Parcial','pago'=>'Pago'] as $k=>$label):
+              ?>
+                <option value="<?= $k ?>" <?= $sf === $k ? 'selected' : '' ?>><?= $label ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Forma de pagamento</label>
+            <select class="form-select" name="forma_pagto">
+              <?php
+                $fp = $os['forma_pagto'] ?? '';
+                $opts = [
+                  ''          => 'Selecione...',
+                  'dinheiro'  => 'Dinheiro',
+                  'cartao'    => 'Cartão',
+                  'pix'       => 'Pix',
+                  'boleto'    => 'Boleto',
+                  'transferencia' => 'Transferência',
+                ];
+                foreach ($opts as $k=>$label):
+              ?>
+                <option value="<?= $k ?>" <?= $fp === $k ? 'selected' : '' ?>><?= $label ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">Valor pago (R$)</label>
+            <input class="form-control" name="valor_pago"
+                   value="<?= number_format((float)($os['valor_pago'] ?? 0),2,',','.') ?>">
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">Data pagamento</label>
+            <input type="date" class="form-control" name="data_pagto"
+                   value="<?= !empty($os['data_pagto']) ? htmlspecialchars(substr($os['data_pagto'],0,10)) : '' ?>">
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="table-responsive itens-responsive">
-      <table class="table table-sm align-middle" id="itensTable">
-        <thead class="table-light">
-          <tr>
-            <th style="width:110px">Tipo</th>
-            <th>Ref.</th>
-            <th>Descrição</th>
-            <th style="width:110px" class="text-end">Qtd</th>
-            <th style="width:140px" class="text-end">Vlr Unit (R$)</th>
-            <th style="width:140px" class="text-end">Total (R$)</th>
-            <th style="width:70px"></th>
-          </tr>
-        </thead>
-        <tbody id="itensBody">
-          <?php if (empty($itens)): ?>
-            <tr id="emptyRow">
-              <td colspan="7" class="text-center text-muted py-3">
-                Nenhum item. Use <b>+ Produto</b> ou <b>+ Serviço</b>.
-              </td>
-            </tr>
+    <!-- Fotos do produto -->
+    <div class="card mb-3">
+      <div class="card-header d-flex align-items-center">
+        <strong>Fotos</strong>
+        <button class="btn btn-outline-secondary btn-sm ms-auto"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#fotosProdutoCollapse"
+                aria-expanded="false"
+                aria-controls="fotosProdutoCollapse">
+          <i class="bi bi-camera"></i> Adicionar fotos do produto
+        </button>
+      </div>
+
+      <div class="collapse" id="fotosProdutoCollapse">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <span class="text-muted small">Fotos do produto (estado de chegada)</span>
+            <?php if ($id>0): ?>
+              <small class="text-muted">Upload instantâneo — limite 2 MB por foto.</small>
+            <?php else: ?>
+              <small class="text-muted">Salve a OS primeiro para habilitar consulta das fotos.</small>
+            <?php endif; ?>
+          </div>
+
+          <?php if ($id>0): ?>
+            <!-- Uploader assíncrono -->
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <label class="btn btn-primary btn-sm mb-0" for="fotoAsync">
+                <i class="bi bi-camera"></i> Tirar foto / Anexar
+              </label>
+              <input type="file" id="fotoAsync" accept="image/*" capture="environment" multiple style="display:none"
+                     data-os-id="<?= (int)$id ?>">
+              <button type="button"
+                      id="btnVerFotos"
+                      class="btn btn-outline-secondary btn-sm"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modalFotos">
+                <i class="bi bi-images"></i>
+                Ver fotos (<span id="fotoCount"><?= $fotosQtde ?></span>)
+              </button>
+              <small class="text-muted d-block d-md-inline">
+                Máx 10 imagens por envio, até 2 MB cada (JPG/PNG/GIF).
+              </small>
+            </div>
+            <div id="uploadMsg" class="small text-muted"></div>
+          <?php else: ?>
+            <!-- Fallback para OS nova (sem id ainda) -->
+            <p class="text-muted mb-2">
+              No celular, você pode tirar foto direto da câmera. As imagens serão salvas ao clicar em <b>Salvar</b>.
+            </p>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <label class="btn btn-primary btn-sm mb-0" for="fotos">
+                <i class="bi bi-camera"></i> Tirar foto / Anexar
+              </label>
+              <input type="file" id="fotos" name="fotos[]" accept="image/*" capture="environment" multiple style="display:none">
+              <small class="text-muted">Máx 10 imagens, até 2 MB cada. JPG/PNG/GIF.</small>
+            </div>
+            <div id="preview" class="d-flex flex-wrap" style="gap:10px"></div>
           <?php endif; ?>
-        </tbody>
-      </table>
+        </div>
+      </div>
     </div>
-
-    <!-- Totais -->
-<div class="row g-3 mt-2">
-  <div class="col-md-3 ms-auto">
-    <label class="form-label">Desconto (R$)</label>
-    <input class="form-control" name="desconto"
-           value="<?= number_format((float)($os['desconto'] ?? 0),2,',','.') ?>">
-  </div>
-  <div class="col-md-3">
-    <label class="form-label">Acréscimo (R$)</label>
-    <input class="form-control" name="acrescimo"
-           value="<?= number_format((float)($os['acrescimo'] ?? 0),2,',','.') ?>">
-  </div>
-  <div class="col-md-3">
-    <label class="form-label">Total (R$)</label>
-    <input class="form-control" name="total" id="totalGeral" readonly
-           value="<?= number_format((float)($os['total'] ?? 0),2,',','.') ?>">
-  </div>
-</div>
-
-<hr class="my-3">
-
-<!-- Pagamento -->
-<div class="row g-3">
-  <div class="col-md-4">
-    <label class="form-label">Status financeiro</label>
-    <select class="form-select" name="status_financeiro">
-      <?php
-        $sf = $os['status_financeiro'] ?? 'pendente';
-        foreach (['pendente'=>'Pendente','parcial'=>'Parcial','pago'=>'Pago'] as $k=>$label):
-      ?>
-        <option value="<?= $k ?>" <?= $sf === $k ? 'selected' : '' ?>><?= $label ?></option>
-      <?php endforeach; ?>
-    </select>
-  </div>
-
-  <div class="col-md-4">
-    <label class="form-label">Forma de pagamento</label>
-    <select class="form-select" name="forma_pagto">
-      <?php
-        $fp = $os['forma_pagto'] ?? '';
-        $opts = [
-          ''          => 'Selecione...',
-          'dinheiro'  => 'Dinheiro',
-          'cartao'    => 'Cartão',
-          'pix'       => 'Pix',
-          'boleto'    => 'Boleto',
-          'transferencia' => 'Transferência',
-        ];
-        foreach ($opts as $k=>$label):
-      ?>
-        <option value="<?= $k ?>" <?= $fp === $k ? 'selected' : '' ?>><?= $label ?></option>
-      <?php endforeach; ?>
-    </select>
-  </div>
-
-  <div class="col-md-2">
-    <label class="form-label">Valor pago (R$)</label>
-    <input class="form-control" name="valor_pago"
-           value="<?= number_format((float)($os['valor_pago'] ?? 0),2,',','.') ?>">
-  </div>
-
-  <div class="col-md-2">
-    <label class="form-label">Data pagamento</label>
-    <input type="date" class="form-control" name="data_pagto"
-           value="<?= !empty($os['data_pagto']) ? htmlspecialchars(substr($os['data_pagto'],0,10)) : '' ?>">
-  </div>
-</div>
 
     <div class="d-flex justify-content-end gap-2 mt-3">
       <a class="btn btn-outline-secondary" href="/os_list.php">Cancelar</a>
@@ -548,7 +590,6 @@ if ($os && !empty($os['garantia_ate'])) {
   }
 }
 </style>
-
 <script>
 // Catálogos p/ front
 const PRODUTOS = <?= json_encode($produtos, JSON_UNESCAPED_UNICODE) ?>;

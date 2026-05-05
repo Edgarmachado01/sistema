@@ -153,7 +153,7 @@ function hfSituacaoLancamento(array $l)
       <div class="hf-ico"><i class="bi bi-journal-text"></i></div><span>Lançamentos</span>
     </a>
 
-    <a class="nav-link <?= ($_GET['m']??'')==='cfg'?'active':'' ?>" href="/configuracoes.php?m=cfg" title="Configurações">
+    <a class="nav-link <?= ($_GET['m']??'')==='hf'?'active':'' ?>" href="/config_empresa.php?m=hf" title="Configurações">
       <div class="hf-ico"><i class="bi bi-gear"></i></div><span>Configurações</span>
     </a>
 
