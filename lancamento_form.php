@@ -271,18 +271,28 @@ if (file_exists(__DIR__.'/layout_start.php')) {
 </aside>
 
 <!-- CONTEÚDO -->
-<main class="hf-content">
-  <div class="container-fluid py-3">
+<main class="hf-content hf-lanc-form-page">
+  <div class="container-fluid py-4 hf-lanc-form-wrap">
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0"><?= $modoEdicao ? 'Editar lançamento' : 'Novo lançamento' ?></h4>
-      <a href="/lancamentos.php?m=lanc" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-arrow-left me-1"></i> Voltar
-      </a>
+    <div class="hf-lanc-form-top mb-3">
+      <div class="hf-lanc-form-title">
+        <div class="hf-page-kicker">Financeiro</div>
+        <h4 class="mb-0"><?= $modoEdicao ? 'Editar lançamento' : 'Novo lançamento' ?></h4>
+        <div class="hf-page-subtitle">Organize tipo, valores, datas, pagamento e observações do lançamento.</div>
+      </div>
+
+      <div class="hf-lanc-form-actions">
+        <a href="/lancamentos.php?m=lanc" class="btn btn-outline-secondary btn-sm hf-top-action-btn">
+          <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+      </div>
     </div>
 
     <?php if (!empty($erros)): ?>
-      <div class="alert alert-danger">
+      <div class="alert alert-danger hf-lanc-alert">
+        <div class="fw-semibold mb-1">
+          <i class="bi bi-exclamation-triangle me-2"></i>Revise os campos abaixo
+        </div>
         <ul class="mb-0">
           <?php foreach ($erros as $e): ?>
             <li><?= htmlspecialchars((string)$e) ?></li>
@@ -291,91 +301,125 @@ if (file_exists(__DIR__.'/layout_start.php')) {
       </div>
     <?php endif; ?>
 
-    <form method="post" class="card shadow-sm">
+    <form method="post" class="hf-lanc-form-shell">
       <input type="hidden" name="id" value="<?= (int)$id ?>">
-      <div class="card-body">
 
-        <div class="row">
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Tipo de movimento</label>
-            <select name="tipo_mov" class="form-control" required>
-              <option value="entrada" <?= $tipo_mov==='entrada'?'selected':'' ?>>Entrada</option>
-              <option value="saida"   <?= $tipo_mov==='saida'?'selected':'' ?>>Saída</option>
-            </select>
-          </div>
-
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Tipo de conta</label>
-            <select name="tipo_conta" class="form-control" required>
-              <option value="avulsa"     <?= $tipo_conta==='avulsa'?'selected':'' ?>>Avulsa</option>
-              <option value="recorrente" <?= $tipo_conta==='recorrente'?'selected':'' ?>>Recorrente</option>
-            </select>
-          </div>
-
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Data lançamento</label>
-            <input type="date" name="data_lancamento" class="form-control"
-                   value="<?= htmlspecialchars((string)$data_lancamento) ?>" required>
-          </div>
-
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Data vencimento</label>
-            <input type="date" name="data_vencimento" class="form-control"
-                   value="<?= htmlspecialchars((string)$data_vencimento) ?>" required>
+      <div class="card mb-3 hf-form-section">
+        <div class="card-header hf-section-header">
+          <div class="hf-section-icon"><i class="bi bi-journal-text"></i></div>
+          <div>
+            <strong>Dados do lançamento</strong>
+            <span>Tipo de movimento, tipo de conta e descrição principal.</span>
           </div>
         </div>
+        <div class="card-body hf-section-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Tipo de movimento</label>
+              <select name="tipo_mov" class="form-control" required>
+                <option value="entrada" <?= $tipo_mov==='entrada'?'selected':'' ?>>Entrada</option>
+                <option value="saida"   <?= $tipo_mov==='saida'?'selected':'' ?>>Saída</option>
+              </select>
+            </div>
 
-        <div class="mb-3">
-          <label class="form-label">Descrição</label>
-          <input type="text" name="descricao" class="form-control"
-                 value="<?= htmlspecialchars((string)$descricao) ?>" required>
-        </div>
+            <div class="col-md-3">
+              <label class="form-label">Tipo de conta</label>
+              <select name="tipo_conta" class="form-control" required>
+                <option value="avulsa"     <?= $tipo_conta==='avulsa'?'selected':'' ?>>Avulsa</option>
+                <option value="recorrente" <?= $tipo_conta==='recorrente'?'selected':'' ?>>Recorrente</option>
+              </select>
+            </div>
 
-        <div class="row">
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Valor (R$)</label>
-            <input type="text" name="valor" class="form-control"
-                   value="<?= htmlspecialchars((string)$valor) ?>" required>
-          </div>
-
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Status</label>
-            <select name="status" class="form-control" required>
-              <option value="aberto"    <?= $status==='aberto'?'selected':'' ?>>Em aberto</option>
-              <option value="pago"      <?= $status==='pago'?'selected':'' ?>>Pago</option>
-              <option value="cancelado" <?= $status==='cancelado'?'selected':'' ?>>Cancelado</option>
-            </select>
-          </div>
-
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Data pagamento</label>
-            <input type="date" name="data_pagamento" class="form-control"
-                   value="<?= htmlspecialchars((string)$data_pagamento) ?>">
-          </div>
-
-          <div class="col-md-3 mb-3">
-            <label class="form-label">Valor pago (R$)</label>
-            <input type="text" name="valor_pago" class="form-control"
-                   value="<?= htmlspecialchars((string)$valor_pago) ?>">
+            <div class="col-md-6">
+              <label class="form-label">Descrição</label>
+              <input type="text" name="descricao" class="form-control"
+                     value="<?= htmlspecialchars((string)$descricao) ?>" required>
+            </div>
           </div>
         </div>
-
-        <div class="row">
-          <div class="col-md-4 mb-3">
-            <label class="form-label">Forma de pagamento</label>
-            <input type="text" name="forma_pagamento" class="form-control"
-                   value="<?= htmlspecialchars((string)$forma_pagamento) ?>">
-          </div>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">Observação</label>
-          <textarea name="observacao" rows="3" class="form-control"><?= htmlspecialchars((string)$observacao) ?></textarea>
-        </div>
-
       </div>
-      <div class="card-footer text-end">
-        <button type="submit" class="btn btn-success">
+
+      <div class="card mb-3 hf-form-section">
+        <div class="card-header hf-section-header">
+          <div class="hf-section-icon"><i class="bi bi-cash-coin"></i></div>
+          <div>
+            <strong>Financeiro</strong>
+            <span>Valor, status, pagamento e forma de recebimento ou despesa.</span>
+          </div>
+        </div>
+        <div class="card-body hf-section-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Valor (R$)</label>
+              <input type="text" name="valor" class="form-control hf-money-input"
+                     value="<?= htmlspecialchars((string)$valor) ?>" required>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Status</label>
+              <select name="status" class="form-control" required>
+                <option value="aberto"    <?= $status==='aberto'?'selected':'' ?>>Em aberto</option>
+                <option value="pago"      <?= $status==='pago'?'selected':'' ?>>Pago</option>
+                <option value="cancelado" <?= $status==='cancelado'?'selected':'' ?>>Cancelado</option>
+              </select>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Valor pago (R$)</label>
+              <input type="text" name="valor_pago" class="form-control"
+                     value="<?= htmlspecialchars((string)$valor_pago) ?>">
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Forma de pagamento</label>
+              <input type="text" name="forma_pagamento" class="form-control"
+                     value="<?= htmlspecialchars((string)$forma_pagamento) ?>">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3 hf-form-section">
+        <div class="card-header hf-section-header">
+          <div class="hf-section-icon"><i class="bi bi-calendar3"></i></div>
+          <div>
+            <strong>Informações adicionais</strong>
+            <span>Datas de lançamento, vencimento, pagamento e observação.</span>
+          </div>
+        </div>
+        <div class="card-body hf-section-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Data lançamento</label>
+              <input type="date" name="data_lancamento" class="form-control"
+                     value="<?= htmlspecialchars((string)$data_lancamento) ?>" required>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Data vencimento</label>
+              <input type="date" name="data_vencimento" class="form-control"
+                     value="<?= htmlspecialchars((string)$data_vencimento) ?>" required>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Data pagamento</label>
+              <input type="date" name="data_pagamento" class="form-control"
+                     value="<?= htmlspecialchars((string)$data_pagamento) ?>">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Observação</label>
+              <textarea name="observacao" rows="3" class="form-control"><?= htmlspecialchars((string)$observacao) ?></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hf-form-actions">
+        <a class="btn btn-outline-secondary hf-btn-cancel" href="/lancamentos.php?m=lanc">
+          <i class="bi bi-x-lg me-1"></i>Cancelar
+        </a>
+        <button type="submit" class="btn btn-success hf-btn-save">
           <i class="bi bi-check-lg me-1"></i> Salvar
         </button>
       </div>
@@ -383,6 +427,234 @@ if (file_exists(__DIR__.'/layout_start.php')) {
 
   </div>
 </main>
+
+<style>
+.hf-lanc-form-page {
+  min-height: calc(100vh - var(--topbar-h));
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .10), transparent 28rem),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+}
+
+.hf-lanc-form-wrap {
+  max-width: 1480px;
+}
+
+.hf-lanc-form-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.hf-lanc-form-title {
+  padding: .25rem .1rem .55rem;
+}
+
+.hf-page-kicker {
+  font-size: .74rem;
+  font-weight: 800;
+  color: rgba(var(--bs-primary-rgb), .88);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: .12rem;
+}
+
+.hf-page-subtitle {
+  margin-top: .2rem;
+  color: #64748b;
+  font-size: .9rem;
+}
+
+.hf-lanc-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.hf-lanc-alert {
+  border: 1px solid rgba(248, 113, 113, .26);
+  border-radius: .95rem;
+  background: #fef2f2;
+  color: #991b1b;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+}
+
+.hf-lanc-form-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.hf-form-section {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+}
+
+.hf-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: .85rem;
+  padding: 1.1rem 1.15rem;
+  border-bottom: 1px solid rgba(226, 232, 240, .9);
+  background: linear-gradient(180deg, rgba(248, 250, 252, .95), rgba(255, 255, 255, .95));
+}
+
+.hf-section-header strong {
+  display: block;
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.hf-section-header span {
+  display: block;
+  margin-top: .18rem;
+  color: #64748b;
+  font-size: .86rem;
+}
+
+.hf-section-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: .85rem;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .10);
+  font-size: 1.15rem;
+}
+
+.hf-section-body {
+  padding: 1.15rem;
+}
+
+.hf-form-section .form-label {
+  margin-bottom: .35rem;
+  font-size: .76rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.hf-form-section .form-control,
+.hf-form-section .form-select {
+  min-height: 42px;
+  border-radius: .72rem;
+  border-color: #dbe3ee;
+  background-color: #f8fafc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75);
+}
+
+.hf-form-section textarea.form-control {
+  min-height: 96px;
+}
+
+.hf-form-section .form-control:focus,
+.hf-form-section .form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), .55);
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
+  background-color: #fff;
+}
+
+.hf-money-input {
+  color: #047857;
+  font-weight: 900;
+}
+
+.hf-top-action-btn,
+.hf-btn-save,
+.hf-btn-cancel {
+  min-height: 36px;
+  border-radius: .72rem;
+  font-weight: 800;
+}
+
+.hf-btn-save {
+  box-shadow: 0 8px 18px rgba(22, 163, 74, .16);
+}
+
+.hf-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-end;
+  gap: .65rem;
+  padding: 1rem;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 -8px 26px rgba(15, 23, 42, .08);
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 767.98px) {
+  .hf-lanc-form-page {
+    padding-left: .25rem;
+    padding-right: .25rem;
+  }
+
+  .hf-lanc-form-top {
+    flex-direction: column;
+  }
+
+  .hf-lanc-form-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .hf-lanc-form-actions .btn {
+    width: 100%;
+  }
+
+  .hf-section-header,
+  .hf-section-body {
+    padding: 1rem;
+  }
+
+  .hf-form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .hf-form-actions .btn {
+    width: 100%;
+  }
+}
+
+[data-bs-theme="dark"] .hf-lanc-form-page {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .16), transparent 28rem),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+[data-bs-theme="dark"] .hf-form-section,
+[data-bs-theme="dark"] .hf-form-actions {
+  background: rgba(17, 24, 39, .9);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-section-header {
+  background: linear-gradient(180deg, rgba(30, 41, 59, .95), rgba(17, 24, 39, .95));
+  border-color: rgba(51, 65, 85, .9);
+}
+
+[data-bs-theme="dark"] .hf-section-header strong {
+  color: #e5e7eb;
+}
+
+[data-bs-theme="dark"] .hf-form-section .form-control,
+[data-bs-theme="dark"] .hf-form-section .form-select {
+  background-color: rgba(15, 23, 42, .9);
+  border-color: rgba(148, 163, 184, .24);
+}
+</style>
 
 <?php
 if (file_exists(__DIR__.'/layout_end.php')) {

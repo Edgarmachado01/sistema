@@ -103,317 +103,355 @@ if ($os && !empty($os['garantia_ate'])) {
 }
 ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
-<main class="hf-content">
-  <div class="d-flex align-items-center mb-3">
-    <h4 class="mb-0">
-      <?= $id>0 ? 'Editar OS' : 'Nova OS' ?>
-      <?php if ($id>0 && !empty($os['numero'])): ?>
-        <small class="text-muted">#<?= (int)$os['numero']; ?></small>
-      <?php endif; ?>
-    </h4>
+<main class="hf-content hf-os-form-page">
+  <div class="container-fluid py-4 hf-os-form-wrap">
 
-    <div class="ms-auto d-flex gap-2">
-      <?php if ($id>0): ?>
-        <!-- Botão para abrir o documento da OS -->
-        <a href="/os_documento.php?id=<?= (int)$id ?>"
-           target="_blank"
-           class="btn btn-outline-secondary btn-sm">
-          <i class="bi bi-file-earmark-text"></i> Documento
-        </a>
-      <?php endif; ?>
-
-      <a class="btn btn-outline-secondary btn-sm" href="/os_list.php">
-        <i class="bi bi-arrow-left"></i> Voltar
-      </a>
-    </div>
-  </div>
-
-  <!-- IMPORTANTE: enctype para upload -->
-  <form class="hf-card p-3" method="post" action="/os_save.php" id="osForm" enctype="multipart/form-data">
-    <input type="hidden" name="id" value="<?= (int)$id ?>">
-
-    <!-- Cliente -->
-    <div class="card mb-3">
-      <div class="card-header">
-        <strong>Cliente</strong>
+    <div class="hf-os-form-top mb-3">
+      <div class="hf-os-form-title">
+        <div class="hf-page-kicker">Ordem de Serviço</div>
+        <h4 class="mb-0">
+          <?= $id>0 ? 'Editar OS' : 'Nova OS' ?>
+          <?php if ($id>0 && !empty($os['numero'])): ?>
+            <span class="hf-os-form-number">#<?= (int)$os['numero']; ?></span>
+          <?php endif; ?>
+        </h4>
+        <div class="hf-page-subtitle">
+          Organize cliente, execução, itens, financeiro e fotos da OS.
+        </div>
       </div>
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label">Cliente*</label>
-            <div class="input-group">
-              <select class="form-select" name="cliente_id" id="cliSelect" required>
-                <option value="">Selecione...</option>
-                <?php foreach($clientes as $c): ?>
-                  <option value="<?= (int)$c['id'] ?>"
-                          data-garantia="<?= (int)($c['default_garantia_dias'] ?? 0) ?>"
-                          <?= $os && (int)$os['cliente_id']===(int)$c['id'] ? 'selected':'' ?>>
-                    <?= htmlspecialchars($c['nome']) ?>
-                  </option>
+
+      <div class="hf-os-form-actions">
+        <?php if ($id>0): ?>
+          <!-- Botão para abrir o documento da OS -->
+          <a href="/os_documento.php?id=<?= (int)$id ?>"
+             target="_blank"
+             class="btn btn-outline-secondary btn-sm hf-top-action-btn">
+            <i class="bi bi-file-earmark-text"></i> Documento
+          </a>
+        <?php endif; ?>
+
+        <a class="btn btn-outline-secondary btn-sm hf-top-action-btn" href="/os_list.php">
+          <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+      </div>
+    </div>
+
+    <!-- IMPORTANTE: enctype para upload -->
+    <form class="hf-os-form-shell" method="post" action="/os_save.php" id="osForm" enctype="multipart/form-data">
+      <input type="hidden" name="id" value="<?= (int)$id ?>">
+
+      <!-- Cliente -->
+      <div class="card mb-3 hf-form-section hf-section-cliente">
+        <div class="card-header hf-section-header">
+          <div class="hf-section-icon"><i class="bi bi-person-vcard"></i></div>
+          <div>
+            <strong>Cliente</strong>
+            <span>Selecione o cliente vinculado à ordem de serviço.</span>
+          </div>
+        </div>
+        <div class="card-body hf-section-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Cliente*</label>
+              <div class="input-group hf-input-group">
+                <select class="form-select" name="cliente_id" id="cliSelect" required>
+                  <option value="">Selecione...</option>
+                  <?php foreach($clientes as $c): ?>
+                    <option value="<?= (int)$c['id'] ?>"
+                            data-garantia="<?= (int)($c['default_garantia_dias'] ?? 0) ?>"
+                            <?= $os && (int)$os['cliente_id']===(int)$c['id'] ? 'selected':'' ?>>
+                      <?= htmlspecialchars($c['nome']) ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
+                <button class="btn btn-outline-success hf-icon-btn" type="button" data-bs-toggle="modal" data-bs-target="#modalCliente" title="Cadastrar cliente">
+                  <i class="bi bi-person-plus"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Execução -->
+      <div class="card mb-3 hf-form-section hf-section-execucao">
+        <div class="card-header hf-section-header">
+          <div class="hf-section-icon"><i class="bi bi-tools"></i></div>
+          <div>
+            <strong>Execução</strong>
+            <span>Status, prioridade, técnico, defeito e laudo.</span>
+          </div>
+        </div>
+        <div class="card-body hf-section-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status">
+                <?php foreach(['aberta','em_andamento','concluida','cancelada'] as $s): ?>
+                  <option value="<?= $s ?>" <?= $os && $os['status']===$s ? 'selected':'' ?>><?= ucfirst(str_replace('_',' ',$s)) ?></option>
                 <?php endforeach; ?>
               </select>
-              <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#modalCliente" title="Cadastrar cliente">
-                <i class="bi bi-person-plus"></i>
-              </button>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Prioridade</label>
+              <select class="form-select" name="prioridade">
+                <?php foreach(['baixa','media','alta'] as $p): ?>
+                  <option value="<?= $p ?>" <?= $os && $os['prioridade']===$p ? 'selected':'' ?>><?= ucfirst($p) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Técnico</label>
+              <input class="form-control" name="tecnico" maxlength="120" value="<?= htmlspecialchars($os['tecnico'] ?? '') ?>">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Defeito reclamado</label>
+              <textarea class="form-control" name="defeito" rows="2"><?= htmlspecialchars($os['defeito'] ?? '') ?></textarea>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Laudo / Observações</label>
+              <textarea class="form-control" name="laudo" rows="2"><?= htmlspecialchars($os['laudo'] ?? '') ?></textarea>
+            </div>
+
+            <div class="col-md-5 col-lg-4">
+              <label class="form-label">Garantia (dias)</label>
+              <div class="input-group hf-input-group hf-garantia-group">
+                <input type="number" min="0" step="1" class="form-control" name="garantia_dias" id="garantiaDias"
+                       value="<?= htmlspecialchars($garantiaDiasEdit) ?>">
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="15">15</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="30">30</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="60">60</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="90">90</button>
+              </div>
+              <small class="text-muted">A data final será calculada automaticamente.</small>
+            </div>
+
+            <input type="hidden" name="valor_mao_obra" value="0,00">
+          </div>
+        </div>
+      </div>
+
+      <!-- Itens -->
+      <div class="card mb-3 hf-form-section hf-section-itens">
+        <div class="card-header hf-section-header hf-section-header-actions">
+          <div class="d-flex align-items-start gap-2">
+            <div class="hf-section-icon"><i class="bi bi-box-seam"></i></div>
+            <div>
+              <strong>Itens / Produto e Serviço</strong>
+              <span>Monte a composição da OS com produtos e serviços.</span>
             </div>
           </div>
+          <div class="hf-section-actions">
+            <button type="button" class="btn btn-primary btn-sm hf-pill-btn" id="addProd">
+              <i class="bi bi-plus-lg"></i> Produto
+            </button>
+            <button type="button" class="btn btn-success btn-sm hf-pill-btn" id="addServ">
+              <i class="bi bi-plus-lg"></i> Serviço
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Execução -->
-    <div class="card mb-3">
-      <div class="card-header">
-        <strong>Execução</strong>
-      </div>
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-md-3">
-            <label class="form-label">Status</label>
-            <select class="form-select" name="status">
-              <?php foreach(['aberta','em_andamento','concluida','cancelada'] as $s): ?>
-                <option value="<?= $s ?>" <?= $os && $os['status']===$s ? 'selected':'' ?>><?= ucfirst(str_replace('_',' ',$s)) ?></option>
-              <?php endforeach; ?>
-            </select>
+        <div class="card-body hf-section-body">
+          <div class="d-flex align-items-center mb-2" id="itensActions">
+            <h6 class="mb-0">Produtos e serviços da OS</h6>
           </div>
 
-          <div class="col-md-3">
-            <label class="form-label">Prioridade</label>
-            <select class="form-select" name="prioridade">
-              <?php foreach(['baixa','media','alta'] as $p): ?>
-                <option value="<?= $p ?>" <?= $os && $os['prioridade']===$p ? 'selected':'' ?>><?= ucfirst($p) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Técnico</label>
-            <input class="form-control" name="tecnico" maxlength="120" value="<?= htmlspecialchars($os['tecnico'] ?? '') ?>">
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Defeito reclamado</label>
-            <textarea class="form-control" name="defeito" rows="2"><?= htmlspecialchars($os['defeito'] ?? '') ?></textarea>
-          </div>
-
-          <div class="col-12">
-            <label class="form-label">Laudo / Observações</label>
-            <textarea class="form-control" name="laudo" rows="2"><?= htmlspecialchars($os['laudo'] ?? '') ?></textarea>
-          </div>
-
-          <div class="col-md-5 col-lg-4">
-            <label class="form-label">Garantia (dias)</label>
-            <div class="input-group">
-              <input type="number" min="0" step="1" class="form-control" name="garantia_dias" id="garantiaDias"
-                     value="<?= htmlspecialchars($garantiaDiasEdit) ?>">
-              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="15">15</button>
-              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="30">30</button>
-              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="60">60</button>
-              <button class="btn btn-outline-secondary btn-sm" type="button" data-gd="90">90</button>
-            </div>
-            <small class="text-muted">A data final será calculada automaticamente.</small>
-          </div>
-
-          <input type="hidden" name="valor_mao_obra" value="0,00">
-        </div>
-      </div>
-    </div>
-
-    <!-- Itens -->
-    <div class="card mb-3">
-      <div class="card-header d-flex align-items-center">
-        <strong>Itens</strong>
-        <div class="ms-auto d-flex gap-2">
-          <button type="button" class="btn btn-primary btn-sm" id="addProd">
-            <i class="bi bi-plus-lg"></i> Produto
-          </button>
-          <button type="button" class="btn btn-success btn-sm" id="addServ">
-            <i class="bi bi-plus-lg"></i> Serviço
-          </button>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-2" id="itensActions">
-          <h6 class="mb-0">Produtos e serviços da OS</h6>
-        </div>
-
-        <div class="table-responsive itens-responsive">
-          <table class="table table-sm align-middle" id="itensTable">
-            <thead class="table-light">
-              <tr>
-                <th style="width:110px">Tipo</th>
-                <th>Ref.</th>
-                <th>Descrição</th>
-                <th style="width:110px" class="text-end">Qtd</th>
-                <th style="width:140px" class="text-end">Vlr Unit (R$)</th>
-                <th style="width:140px" class="text-end">Total (R$)</th>
-                <th style="width:70px"></th>
-              </tr>
-            </thead>
-            <tbody id="itensBody">
-              <?php if (empty($itens)): ?>
-                <tr id="emptyRow">
-                  <td colspan="7" class="text-center text-muted py-3">
-                    Nenhum item. Use <b>+ Produto</b> ou <b>+ Serviço</b>.
-                  </td>
+          <div class="table-responsive itens-responsive">
+            <table class="table table-sm align-middle" id="itensTable">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:110px">Tipo</th>
+                  <th>Ref.</th>
+                  <th>Descrição</th>
+                  <th style="width:110px" class="text-end">Qtd</th>
+                  <th style="width:140px" class="text-end">Vlr Unit (R$)</th>
+                  <th style="width:140px" class="text-end">Total (R$)</th>
+                  <th style="width:70px"></th>
                 </tr>
+              </thead>
+              <tbody id="itensBody">
+                <?php if (empty($itens)): ?>
+                  <tr id="emptyRow">
+                    <td colspan="7" class="text-center text-muted py-3">
+                      Nenhum item. Use <b>+ Produto</b> ou <b>+ Serviço</b>.
+                    </td>
+                  </tr>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Financeiro -->
+      <div class="card mb-3 hf-form-section hf-section-financeiro">
+        <div class="card-header hf-section-header">
+          <div class="hf-section-icon"><i class="bi bi-cash-coin"></i></div>
+          <div>
+            <strong>Financeiro</strong>
+            <span>Valores, pagamento e situação financeira da OS.</span>
+          </div>
+        </div>
+        <div class="card-body hf-section-body">
+          <!-- Totais -->
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Desconto (R$)</label>
+              <input class="form-control" name="desconto"
+                     value="<?= number_format((float)($os['desconto'] ?? 0),2,',','.') ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Acréscimo (R$)</label>
+              <input class="form-control" name="acrescimo"
+                     value="<?= number_format((float)($os['acrescimo'] ?? 0),2,',','.') ?>">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Total (R$)</label>
+              <input class="form-control hf-total-input" name="total" id="totalGeral" readonly
+                     value="<?= number_format((float)($os['total'] ?? 0),2,',','.') ?>">
+            </div>
+          </div>
+
+          <hr class="my-3 hf-soft-divider">
+
+          <!-- Pagamento -->
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Status financeiro</label>
+              <select class="form-select" name="status_financeiro">
+                <?php
+                  $sf = $os['status_financeiro'] ?? 'pendente';
+                  foreach (['pendente'=>'Pendente','parcial'=>'Parcial','pago'=>'Pago'] as $k=>$label):
+                ?>
+                  <option value="<?= $k ?>" <?= $sf === $k ? 'selected' : '' ?>><?= $label ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Forma de pagamento</label>
+              <select class="form-select" name="forma_pagto">
+                <?php
+                  $fp = $os['forma_pagto'] ?? '';
+                  $opts = [
+                    ''          => 'Selecione...',
+                    'dinheiro'  => 'Dinheiro',
+                    'cartao'    => 'Cartão',
+                    'pix'       => 'Pix',
+                    'boleto'    => 'Boleto',
+                    'transferencia' => 'Transferência',
+                  ];
+                  foreach ($opts as $k=>$label):
+                ?>
+                  <option value="<?= $k ?>" <?= $fp === $k ? 'selected' : '' ?>><?= $label ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label">Valor pago (R$)</label>
+              <input class="form-control" name="valor_pago"
+                     value="<?= number_format((float)($os['valor_pago'] ?? 0),2,',','.') ?>">
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label">Data pagamento</label>
+              <input type="date" class="form-control" name="data_pagto"
+                     value="<?= !empty($os['data_pagto']) ? htmlspecialchars(substr($os['data_pagto'],0,10)) : '' ?>">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fotos do produto -->
+      <div class="card mb-3 hf-form-section hf-section-fotos">
+        <div class="card-header hf-section-header hf-section-header-actions">
+          <div class="d-flex align-items-start gap-2">
+            <div class="hf-section-icon"><i class="bi bi-camera"></i></div>
+            <div>
+              <strong>Fotos recolhidas/ocultas</strong>
+              <span>Registre o estado de chegada do produto quando necessário.</span>
+            </div>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm hf-top-action-btn"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#fotosProdutoCollapse"
+                  aria-expanded="false"
+                  aria-controls="fotosProdutoCollapse">
+            <i class="bi bi-camera"></i> Adicionar fotos
+          </button>
+        </div>
+
+        <div class="collapse" id="fotosProdutoCollapse">
+          <div class="card-body hf-section-body">
+            <div class="hf-photo-note mb-3">
+              <span class="text-muted small">Fotos do produto (estado de chegada)</span>
+              <?php if ($id>0): ?>
+                <small class="text-muted">Upload instantâneo — limite 2 MB por foto.</small>
+              <?php else: ?>
+                <small class="text-muted">Salve a OS primeiro para habilitar consulta das fotos.</small>
               <?php endif; ?>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    <!-- Financeiro -->
-    <div class="card mb-3">
-      <div class="card-header">
-        <strong>Financeiro</strong>
-      </div>
-      <div class="card-body">
-        <!-- Totais -->
-        <div class="row g-3">
-          <div class="col-md-3">
-            <label class="form-label">Desconto (R$)</label>
-            <input class="form-control" name="desconto"
-                   value="<?= number_format((float)($os['desconto'] ?? 0),2,',','.') ?>">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Acréscimo (R$)</label>
-            <input class="form-control" name="acrescimo"
-                   value="<?= number_format((float)($os['acrescimo'] ?? 0),2,',','.') ?>">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Total (R$)</label>
-            <input class="form-control" name="total" id="totalGeral" readonly
-                   value="<?= number_format((float)($os['total'] ?? 0),2,',','.') ?>">
-          </div>
-        </div>
+            </div>
 
-        <hr class="my-3">
-
-        <!-- Pagamento -->
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label">Status financeiro</label>
-            <select class="form-select" name="status_financeiro">
-              <?php
-                $sf = $os['status_financeiro'] ?? 'pendente';
-                foreach (['pendente'=>'Pendente','parcial'=>'Parcial','pago'=>'Pago'] as $k=>$label):
-              ?>
-                <option value="<?= $k ?>" <?= $sf === $k ? 'selected' : '' ?>><?= $label ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Forma de pagamento</label>
-            <select class="form-select" name="forma_pagto">
-              <?php
-                $fp = $os['forma_pagto'] ?? '';
-                $opts = [
-                  ''          => 'Selecione...',
-                  'dinheiro'  => 'Dinheiro',
-                  'cartao'    => 'Cartão',
-                  'pix'       => 'Pix',
-                  'boleto'    => 'Boleto',
-                  'transferencia' => 'Transferência',
-                ];
-                foreach ($opts as $k=>$label):
-              ?>
-                <option value="<?= $k ?>" <?= $fp === $k ? 'selected' : '' ?>><?= $label ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <div class="col-md-2">
-            <label class="form-label">Valor pago (R$)</label>
-            <input class="form-control" name="valor_pago"
-                   value="<?= number_format((float)($os['valor_pago'] ?? 0),2,',','.') ?>">
-          </div>
-
-          <div class="col-md-2">
-            <label class="form-label">Data pagamento</label>
-            <input type="date" class="form-control" name="data_pagto"
-                   value="<?= !empty($os['data_pagto']) ? htmlspecialchars(substr($os['data_pagto'],0,10)) : '' ?>">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Fotos do produto -->
-    <div class="card mb-3">
-      <div class="card-header d-flex align-items-center">
-        <strong>Fotos</strong>
-        <button class="btn btn-outline-secondary btn-sm ms-auto"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#fotosProdutoCollapse"
-                aria-expanded="false"
-                aria-controls="fotosProdutoCollapse">
-          <i class="bi bi-camera"></i> Adicionar fotos do produto
-        </button>
-      </div>
-
-      <div class="collapse" id="fotosProdutoCollapse">
-        <div class="card-body">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <span class="text-muted small">Fotos do produto (estado de chegada)</span>
             <?php if ($id>0): ?>
-              <small class="text-muted">Upload instantâneo — limite 2 MB por foto.</small>
+              <!-- Uploader assíncrono -->
+              <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <label class="btn btn-primary btn-sm hf-pill-btn mb-0" for="fotoAsync">
+                  <i class="bi bi-camera"></i> Tirar foto / Anexar
+                </label>
+                <input type="file" id="fotoAsync" accept="image/*" capture="environment" multiple style="display:none"
+                       data-os-id="<?= (int)$id ?>">
+                <button type="button"
+                        id="btnVerFotos"
+                        class="btn btn-outline-secondary btn-sm hf-top-action-btn"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalFotos">
+                  <i class="bi bi-images"></i>
+                  Ver fotos (<span id="fotoCount"><?= $fotosQtde ?></span>)
+                </button>
+                <small class="text-muted d-block d-md-inline">
+                  Máx 10 imagens por envio, até 2 MB cada (JPG/PNG/GIF).
+                </small>
+              </div>
+              <div id="uploadMsg" class="small text-muted"></div>
             <?php else: ?>
-              <small class="text-muted">Salve a OS primeiro para habilitar consulta das fotos.</small>
+              <!-- Fallback para OS nova (sem id ainda) -->
+              <p class="text-muted mb-2">
+                No celular, você pode tirar foto direto da câmera. As imagens serão salvas ao clicar em <b>Salvar</b>.
+              </p>
+              <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                <label class="btn btn-primary btn-sm hf-pill-btn mb-0" for="fotos">
+                  <i class="bi bi-camera"></i> Tirar foto / Anexar
+                </label>
+                <input type="file" id="fotos" name="fotos[]" accept="image/*" capture="environment" multiple style="display:none">
+                <small class="text-muted">Máx 10 imagens, até 2 MB cada. JPG/PNG/GIF.</small>
+              </div>
+              <div id="preview" class="d-flex flex-wrap hf-preview-grid"></div>
             <?php endif; ?>
           </div>
-
-          <?php if ($id>0): ?>
-            <!-- Uploader assíncrono -->
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-              <label class="btn btn-primary btn-sm mb-0" for="fotoAsync">
-                <i class="bi bi-camera"></i> Tirar foto / Anexar
-              </label>
-              <input type="file" id="fotoAsync" accept="image/*" capture="environment" multiple style="display:none"
-                     data-os-id="<?= (int)$id ?>">
-              <button type="button"
-                      id="btnVerFotos"
-                      class="btn btn-outline-secondary btn-sm"
-                      data-bs-toggle="modal"
-                      data-bs-target="#modalFotos">
-                <i class="bi bi-images"></i>
-                Ver fotos (<span id="fotoCount"><?= $fotosQtde ?></span>)
-              </button>
-              <small class="text-muted d-block d-md-inline">
-                Máx 10 imagens por envio, até 2 MB cada (JPG/PNG/GIF).
-              </small>
-            </div>
-            <div id="uploadMsg" class="small text-muted"></div>
-          <?php else: ?>
-            <!-- Fallback para OS nova (sem id ainda) -->
-            <p class="text-muted mb-2">
-              No celular, você pode tirar foto direto da câmera. As imagens serão salvas ao clicar em <b>Salvar</b>.
-            </p>
-            <div class="d-flex align-items-center gap-2 mb-2">
-              <label class="btn btn-primary btn-sm mb-0" for="fotos">
-                <i class="bi bi-camera"></i> Tirar foto / Anexar
-              </label>
-              <input type="file" id="fotos" name="fotos[]" accept="image/*" capture="environment" multiple style="display:none">
-              <small class="text-muted">Máx 10 imagens, até 2 MB cada. JPG/PNG/GIF.</small>
-            </div>
-            <div id="preview" class="d-flex flex-wrap" style="gap:10px"></div>
-          <?php endif; ?>
         </div>
       </div>
-    </div>
 
-    <div class="d-flex justify-content-end gap-2 mt-3">
-      <a class="btn btn-outline-secondary" href="/os_list.php">Cancelar</a>
-      <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Salvar</button>
-    </div>
-  </form>
+      <div class="hf-form-actions">
+        <a class="btn btn-outline-secondary hf-btn-cancel" href="/os_list.php">
+          <i class="bi bi-x-lg me-1"></i>Cancelar
+        </a>
+        <button class="btn btn-primary hf-btn-save" type="submit">
+          <i class="bi bi-check-lg"></i> Salvar
+        </button>
+      </div>
+    </form>
+  </div>
 </main>
 
 <!-- Modal: Novo Cliente (cadastro rápido) -->
 <div class="modal fade" id="modalCliente" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <form class="modal-content" id="formQuickCliente">
+    <form class="modal-content hf-modal-card" id="formQuickCliente">
       <div class="modal-header">
         <h5 class="modal-title"><i class="bi bi-person-plus"></i> Novo Cliente</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
@@ -440,8 +478,8 @@ if ($os && !empty($os['garantia_ate'])) {
         <div id="quickCliMsg" class="text-danger small mt-2" style="display:none"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
-        <button class="btn btn-primary" type="submit">
+        <button class="btn btn-secondary hf-btn-cancel" type="button" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary hf-btn-save" type="submit">
           <i class="bi bi-check-lg"></i> Salvar e usar
         </button>
       </div>
@@ -453,7 +491,7 @@ if ($os && !empty($os['garantia_ate'])) {
 <?php if ($id>0): ?>
 <div class="modal fade" id="modalFotos" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content hf-modal-card">
       <div class="modal-header">
         <h5 class="modal-title">
           <i class="bi bi-images"></i>
@@ -479,7 +517,7 @@ if ($os && !empty($os['garantia_ate'])) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Fechar</button>
+        <button class="btn btn-secondary hf-btn-cancel" type="button" data-bs-dismiss="modal">Fechar</button>
       </div>
     </div>
   </div>
@@ -488,106 +526,529 @@ if ($os && !empty($os['garantia_ate'])) {
 
 <?php require_once __DIR__.'/_layout_end.php'; ?>
 
-<!-- ====== CSS: Itens + Galeria ====== -->
+<!-- ====== CSS: OS Form + Itens + Galeria ====== -->
 <style>
-#itensActions{
-  position:sticky;
-  top:0;
-  z-index:5;
-  background:#fff;
-  padding:.5rem;
-  border:1px solid #e9ecef;
-  border-radius:.5rem;
-  margin-bottom:.75rem
+.hf-os-form-page {
+  min-height: calc(100vh - var(--topbar-h));
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .10), transparent 28rem),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
 }
-@media (min-width:768px){
-  .itens-responsive table{table-layout:fixed}
-  .itens-responsive .form-control-sm,
-  .itens-responsive .form-select-sm{min-height:34px}
+
+.hf-os-form-wrap {
+  max-width: 1480px;
 }
-@media (max-width:767.98px){
+
+.hf-os-form-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.hf-os-form-title {
+  padding: .25rem .1rem .55rem;
+}
+
+.hf-page-kicker {
+  font-size: .74rem;
+  font-weight: 800;
+  color: rgba(var(--bs-primary-rgb), .88);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: .12rem;
+}
+
+.hf-page-subtitle {
+  margin-top: .2rem;
+  color: #64748b;
+  font-size: .9rem;
+}
+
+.hf-os-form-number {
+  display: inline-flex;
+  align-items: center;
+  margin-left: .45rem;
+  padding: .18rem .55rem;
+  border-radius: 999px;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .10);
+  font-size: .9rem;
+  font-weight: 850;
+  vertical-align: middle;
+}
+
+.hf-os-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.hf-os-form-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.hf-form-section {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+}
+
+.hf-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: .85rem;
+  padding: 1.1rem 1.15rem;
+  border-bottom: 1px solid rgba(226, 232, 240, .9);
+  background: linear-gradient(180deg, rgba(248, 250, 252, .95), rgba(255, 255, 255, .95));
+}
+
+.hf-section-header-actions {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.hf-section-header strong {
+  display: block;
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.hf-section-header span {
+  display: block;
+  margin-top: .18rem;
+  color: #64748b;
+  font-size: .86rem;
+}
+
+.hf-section-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: .85rem;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .10);
+  font-size: 1.15rem;
+}
+
+.hf-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.hf-section-body {
+  padding: 1.15rem;
+}
+
+.hf-form-section .form-label,
+.hf-modal-card .form-label {
+  margin-bottom: .35rem;
+  font-size: .76rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.hf-form-section .form-control,
+.hf-form-section .form-select,
+.hf-modal-card .form-control,
+.hf-modal-card .form-select {
+  min-height: 42px;
+  border-radius: .72rem;
+  border-color: #dbe3ee;
+  background-color: #f8fafc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75);
+}
+
+.hf-form-section textarea.form-control {
+  min-height: 86px;
+}
+
+.hf-form-section .form-control:focus,
+.hf-form-section .form-select:focus,
+.hf-modal-card .form-control:focus,
+.hf-modal-card .form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), .55);
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
+  background-color: #fff;
+}
+
+.hf-input-group .btn {
+  border-radius: .72rem;
+  font-weight: 800;
+}
+
+.hf-input-group .form-select,
+.hf-input-group .form-control {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.hf-input-group .btn:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.hf-garantia-group .btn {
+  min-width: 42px;
+}
+
+.hf-total-input {
+  color: var(--bs-primary);
+  font-weight: 900;
+  background: rgba(var(--bs-primary-rgb), .08) !important;
+}
+
+.hf-soft-divider {
+  border-color: rgba(148, 163, 184, .25);
+}
+
+.hf-pill-btn,
+.hf-top-action-btn,
+.hf-icon-btn,
+.hf-btn-save,
+.hf-btn-cancel {
+  min-height: 36px;
+  border-radius: .72rem;
+  font-weight: 800;
+}
+
+.hf-btn-save {
+  box-shadow: 0 8px 18px rgba(var(--bs-primary-rgb), .16);
+}
+
+.hf-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-end;
+  gap: .65rem;
+  padding: 1rem;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 -8px 26px rgba(15, 23, 42, .08);
+  backdrop-filter: blur(8px);
+}
+
+#itensActions {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: .65rem .75rem;
+  border: 1px solid rgba(226, 232, 240, .9);
+  border-radius: .85rem;
+  margin-bottom: .75rem;
+  background: #f8fafc;
+}
+
+#itensActions h6 {
+  color: #334155;
+  font-size: .88rem;
+  font-weight: 850;
+}
+
+.itens-responsive {
+  border: 1px solid rgba(226, 232, 240, .9);
+  border-radius: .95rem;
+  overflow: hidden;
+}
+
+.itens-responsive table {
+  margin-bottom: 0;
+  --bs-table-bg: transparent;
+}
+
+.itens-responsive thead th {
+  padding: .85rem .75rem;
+  border-bottom: 1px solid rgba(148, 163, 184, .28);
+  background: #f1f5f9;
+  color: #475569;
+  font-size: .72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+  white-space: nowrap;
+}
+
+.itens-responsive tbody td {
+  padding: .7rem .75rem;
+  border-color: rgba(226, 232, 240, .82);
+  color: #334155;
+}
+
+.itens-responsive tbody tr {
+  transition: background-color .14s ease, box-shadow .14s ease;
+}
+
+.itens-responsive tbody tr:hover {
+  background: rgba(var(--bs-primary-rgb), .04);
+}
+
+.itens-responsive .form-control-sm,
+.itens-responsive .form-select-sm {
+  min-height: 34px;
+  border-radius: .6rem;
+}
+
+.itens-responsive .total {
+  color: var(--bs-primary);
+  font-weight: 900;
+}
+
+.hf-photo-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .75rem;
+  border: 1px solid rgba(226, 232, 240, .9);
+  border-radius: .85rem;
+  background: #f8fafc;
+}
+
+.hf-preview-grid {
+  gap: 10px;
+}
+
+.hf-modal-card {
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, .16);
+  overflow: hidden;
+}
+
+.hf-modal-card .modal-header {
+  background: #f8fafc;
+  border-bottom: 1px solid rgba(226, 232, 240, .9);
+}
+
+.hf-modal-card .modal-title {
+  font-weight: 850;
+}
+
+.hf-foto-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: .75rem;
+}
+
+.hf-foto-card {
+  position: relative;
+  border: 1px solid rgba(226, 232, 240, .9);
+  border-radius: .85rem;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+}
+
+.hf-foto-card img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  display: block;
+}
+
+.hf-foto-card .hf-foto-del {
+  position: absolute;
+  top: .35rem;
+  right: .35rem;
+  padding: .2rem .4rem;
+  border-radius: .55rem;
+  backdrop-filter: blur(2px);
+  background: rgba(255, 255, 255, .9);
+}
+
+@media (min-width: 768px) {
+  .itens-responsive table {
+    table-layout: fixed;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .hf-os-form-page {
+    padding-left: .25rem;
+    padding-right: .25rem;
+  }
+
+  .hf-os-form-top,
+  .hf-section-header-actions {
+    flex-direction: column;
+  }
+
+  .hf-os-form-actions,
+  .hf-section-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .hf-os-form-actions .btn,
+  .hf-section-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .hf-section-header,
+  .hf-section-body {
+    padding: 1rem;
+  }
+
+  .hf-form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .hf-form-actions .btn {
+    width: 100%;
+  }
+
+  .itens-responsive {
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+
   .itens-responsive table,
   .itens-responsive thead,
   .itens-responsive tbody,
   .itens-responsive th,
   .itens-responsive td,
-  .itens-responsive tr{
-    display:block;
-    width:100%
+  .itens-responsive tr {
+    display: block;
+    width: 100%;
   }
-  .itens-responsive thead{display:none}
-  .itens-responsive tbody tr{
-    border:1px solid #e9ecef;
-    border-radius:.75rem;
-    padding:.75rem;
-    margin-bottom:.75rem;
-    background:#fff;
-    box-shadow:0 1px 2px rgba(0,0,0,.03)
+
+  .itens-responsive thead {
+    display: none;
   }
-  .itens-responsive td{
-    display:grid;
-    grid-template-columns:minmax(88px,42%) 1fr;
-    align-items:center;
-    gap:.5rem;
-    padding:.35rem 0;
-    border:0!important
+
+  .itens-responsive tbody tr {
+    border: 1px solid rgba(226, 232, 240, .9);
+    border-radius: .95rem;
+    padding: .85rem;
+    margin-bottom: .75rem;
+    background: #f8fafc;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
   }
-  .itens-responsive td[data-label="Ações"]{
-    display:flex;
-    justify-content:flex-end;
-    gap:.5rem;
-    margin-top:.25rem
+
+  .itens-responsive td {
+    display: grid;
+    grid-template-columns: minmax(96px, 38%) 1fr;
+    align-items: center;
+    gap: .55rem;
+    padding: .4rem 0;
+    border: 0 !important;
   }
-  .itens-responsive td::before{
-    content:attr(data-label);
-    font-size:.84rem;
-    color:#6c757d
+
+  .itens-responsive td[data-label="Ações"] {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin-top: .25rem;
+    padding-top: .75rem;
+    border-top: 1px solid rgba(226, 232, 240, .9) !important;
   }
+
+  .itens-responsive td[data-label="Ações"]::before {
+    display: none;
+  }
+
+  .itens-responsive td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
   .itens-responsive .form-control-sm,
-  .itens-responsive .form-select-sm{
-    font-size:1rem;
-    padding:.5rem .65rem;
-    min-height:42px
+  .itens-responsive .form-select-sm {
+    font-size: 1rem;
+    padding: .5rem .65rem;
+    min-height: 42px;
   }
-  .itens-responsive .total{
-    font-weight:600;
-    font-size:1.05rem;
-    color:#0d6efd;
-    text-align:right
+
+  .itens-responsive .total {
+    font-size: 1.05rem;
+    text-align: right;
+  }
+
+  .hf-foto-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
-/* ===== Galeria de fotos ===== */
-.hf-foto-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));
-  gap:.75rem;
-}
-.hf-foto-card{
-  position:relative;
-  border:1px solid #e9ecef;
-  border-radius:.5rem;
-  overflow:hidden;
-  background:#fff;
-}
-.hf-foto-card img{
-  width:100%;
-  height:110px;
-  object-fit:cover;
-  display:block;
-}
-.hf-foto-card .hf-foto-del{
-  position:absolute;
-  top:.35rem;
-  right:.35rem;
-  padding:.2rem .4rem;
-  border-radius:.35rem;
-  backdrop-filter:blur(2px);
-}
-@media (max-width:575.98px){
-  .hf-foto-grid{
-    grid-template-columns:repeat(3,1fr);
+@media (max-width: 575.98px) {
+  .hf-foto-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
+}
+
+[data-bs-theme="dark"] .hf-os-form-page {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .16), transparent 28rem),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+[data-bs-theme="dark"] .hf-form-section,
+[data-bs-theme="dark"] .hf-form-actions,
+[data-bs-theme="dark"] .hf-modal-card {
+  background: rgba(17, 24, 39, .9);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-section-header,
+[data-bs-theme="dark"] .hf-modal-card .modal-header {
+  background: linear-gradient(180deg, rgba(30, 41, 59, .95), rgba(17, 24, 39, .95));
+  border-color: rgba(51, 65, 85, .9);
+}
+
+[data-bs-theme="dark"] .hf-section-header strong,
+[data-bs-theme="dark"] .hf-modal-card .modal-title,
+[data-bs-theme="dark"] #itensActions h6 {
+  color: #e5e7eb;
+}
+
+[data-bs-theme="dark"] .hf-form-section .form-control,
+[data-bs-theme="dark"] .hf-form-section .form-select,
+[data-bs-theme="dark"] .hf-modal-card .form-control,
+[data-bs-theme="dark"] .hf-modal-card .form-select,
+[data-bs-theme="dark"] #itensActions,
+[data-bs-theme="dark"] .hf-photo-note {
+  background-color: rgba(15, 23, 42, .9);
+  border-color: rgba(148, 163, 184, .24);
+}
+
+[data-bs-theme="dark"] .itens-responsive {
+  border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .itens-responsive thead th {
+  background: rgba(30, 41, 59, .95);
+  color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .itens-responsive tbody td {
+  color: #cbd5e1;
+  border-color: rgba(51, 65, 85, .9);
+}
+
+[data-bs-theme="dark"] .itens-responsive tbody tr,
+[data-bs-theme="dark"] .hf-foto-card {
+  background: rgba(15, 23, 42, .82);
+  border-color: rgba(148, 163, 184, .18);
 }
 </style>
 <script>

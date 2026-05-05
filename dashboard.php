@@ -504,287 +504,616 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
 <?php include __DIR__.'/_layout_start.php'; ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
 
-<main class="hf-content">
-  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h4 class="mb-0">Dashboard</h4>
+<main class="hf-content hf-dashboard-page">
+  <div class="container-fluid py-4 hf-dashboard-wrap">
 
-    <!-- Filtro de período + técnico -->
-    <form class="d-flex flex-wrap gap-2 align-items-end" method="get">
+    <div class="hf-dashboard-top mb-3">
+      <div class="hf-dashboard-title">
+        <div class="hf-page-kicker">Visão geral</div>
+        <h4 class="mb-0">Dashboard</h4>
+        <div class="hf-page-subtitle">
+          Acompanhe ordens de serviço, SLA e indicadores financeiros do período.
+        </div>
+      </div>
+
+      <!-- Filtro de período + técnico -->
+      <form class="hf-dashboard-filter" method="get">
+        <div class="hf-filter-field">
+          <label class="form-label mb-1 small">Data inicial</label>
+          <input type="date" name="data_ini" class="form-control form-control-sm"
+                 value="<?php echo htmlspecialchars($data_ini); ?>">
+        </div>
+        <div class="hf-filter-field">
+          <label class="form-label mb-1 small">Data final</label>
+          <input type="date" name="data_fim" class="form-control form-control-sm"
+                 value="<?php echo htmlspecialchars($data_fim); ?>">
+        </div>
+        <div class="hf-filter-field">
+          <label class="form-label mb-1 small">Técnico</label>
+          <select name="tecnico" class="form-select form-select-sm">
+            <option value="0">Todos</option>
+            <?php foreach ($tecnicos as $tec): ?>
+              <option value="<?php echo (int)$tec['id']; ?>" <?php echo $tecnico_id == (int)$tec['id'] ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($tec['nome']); ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <input type="hidden" name="preset" value="">
+        <div class="hf-preset-group">
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="hoje">Hoje</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="7d">7 dias</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_atual">Mês atual</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_anterior">Mês anterior</button>
+        </div>
+        <div>
+          <button type="submit" class="btn btn-sm btn-primary hf-btn-apply">
+            <i class="bi bi-funnel me-1"></i>Aplicar
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div class="hf-section-heading">
       <div>
-        <label class="form-label mb-1 small">Data inicial</label>
-        <input type="date" name="data_ini" class="form-control form-control-sm"
-               value="<?php echo htmlspecialchars($data_ini); ?>">
+        <h5>Ordens de Serviço</h5>
+        <p>Volume, andamento e desempenho operacional.</p>
       </div>
+    </div>
+
+    <!-- ===== LINHA 1: OS ===== -->
+    <div class="row g-3 mb-4">
+      <!-- Total OS -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-primary"
+             style="cursor:pointer"
+             onclick="window.location='<?php echo htmlspecialchars($urlTotalOs); ?>'">
+          <div class="kpi-top">
+            <div class="kpi-title">Total OS</div>
+            <div class="kpi-icon"><i class="bi bi-clipboard-data"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo number_format($total_os, 0, ',', '.'); ?>
+          </div>
+          <div class="kpi-sub">
+            <?php echo $usaPeriodoOs ? 'no período' : 'todas as OS'; ?>
+            <?php if ($var_total_os !== null): ?>
+                <span class="ms-1 small <?php echo $var_total_os >= 0 ? 'text-success' : 'text-danger'; ?>">
+                  <i class="bi bi-arrow-<?php echo $var_total_os >= 0 ? 'up' : 'down'; ?>-short"></i>
+                  <?php echo ($var_total_os >= 0 ? '+' : '').$var_total_os; ?>%
+                </span>
+            <?php endif; ?>
+          </div>
+          <div class="hf-progress">
+            <div class="bar" style="width:100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pendentes -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-danger"
+             style="cursor:pointer"
+             onclick="window.location='<?php echo htmlspecialchars($urlPendentes); ?>'">
+          <div class="kpi-top">
+            <div class="kpi-title">Pendentes</div>
+            <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo number_format($pendentes, 0, ',', '.'); ?>
+          </div>
+          <div class="kpi-sub">
+            <?php
+            if ($total_os > 0) {
+                echo $perc_pendentes.'% das OS';
+            } else {
+                echo 'sem OS no período';
+            }
+            ?>
+            <?php if ($var_pendentes !== null): ?>
+                <span class="ms-1 small <?php echo $var_pendentes <= 0 ? 'text-success' : 'text-danger'; ?>">
+                  <i class="bi bi-arrow-<?php echo $var_pendentes <= 0 ? 'down' : 'up'; ?>-short"></i>
+                  <?php echo ($var_pendentes >= 0 ? '+' : '').$var_pendentes; ?>%
+                </span>
+            <?php endif; ?>
+          </div>
+          <div class="hf-progress">
+            <div class="bar" style="width:<?php echo $perc_pendentes; ?>%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Concluídas -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-success"
+             style="cursor:pointer"
+             onclick="window.location='<?php echo htmlspecialchars($urlConcluidas); ?>'">
+          <div class="kpi-top">
+            <div class="kpi-title">Concluídas</div>
+            <div class="kpi-icon"><i class="bi bi-check2-circle"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo number_format($concluidas, 0, ',', '.'); ?>
+          </div>
+          <div class="kpi-sub">
+            <?php
+            if ($total_os > 0) {
+                echo $perc_concluidas.'% das OS';
+            } else {
+                echo 'sem OS no período';
+            }
+            ?>
+            <?php if ($var_concluidas !== null): ?>
+                <span class="ms-1 small <?php echo $var_concluidas >= 0 ? 'text-success' : 'text-danger'; ?>">
+                  <i class="bi bi-arrow-<?php echo $var_concluidas >= 0 ? 'up' : 'down'; ?>-short"></i>
+                  <?php echo ($var_concluidas >= 0 ? '+' : '').$var_concluidas; ?>%
+                </span>
+            <?php endif; ?>
+          </div>
+          <div class="hf-progress">
+            <div class="bar" style="width:<?php echo $perc_concluidas; ?>%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLA -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-warning">
+          <div class="kpi-top">
+            <div class="kpi-title">SLA médio</div>
+            <div class="kpi-icon"><i class="bi bi-speedometer2"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo $sla_formatado; ?>
+          </div>
+          <div class="kpi-sub">tempo médio de atendimento</div>
+          <div class="hf-progress">
+            <div class="bar" style="width:<?php echo $perc_sla; ?>%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <?php if (!$isAtendenteOnly): ?>
+    <div class="hf-section-heading">
       <div>
-        <label class="form-label mb-1 small">Data final</label>
-        <input type="date" name="data_fim" class="form-control form-control-sm"
-               value="<?php echo htmlspecialchars($data_fim); ?>">
+        <h5>Financeiro</h5>
+        <p>Previsão, recebimento e pendências financeiras.</p>
       </div>
-      <div>
-        <label class="form-label mb-1 small">Técnico</label>
-        <select name="tecnico" class="form-select form-select-sm">
-          <option value="0">Todos</option>
-          <?php foreach ($tecnicos as $tec): ?>
-            <option value="<?php echo (int)$tec['id']; ?>" <?php echo $tecnico_id == (int)$tec['id'] ? 'selected' : ''; ?>>
-              <?php echo htmlspecialchars($tec['nome']); ?>
-            </option>
-          <?php endforeach; ?>
-        </select>
+    </div>
+
+    <!-- ===== LINHA 2: FINANCEIRO ===== -->
+    <div class="row g-3 mb-4">
+      <!-- Total previsto -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-primary"
+             style="cursor:pointer"
+             onclick="window.location='<?php echo htmlspecialchars($urlFinPrevisto); ?>'">
+          <div class="kpi-top">
+            <div class="kpi-title">Previsto no período</div>
+            <div class="kpi-icon"><i class="bi bi-cash-stack"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo money_br($total_previsto); ?>
+          </div>
+          <div class="kpi-sub">títulos com vencimento no período</div>
+          <div class="hf-progress">
+            <div class="bar" style="width:100%"></div>
+          </div>
+        </div>
       </div>
-      <input type="hidden" name="preset" value="">
-      <div class="d-flex gap-1 mb-1">
-        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="hoje">Hoje</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="7d">7 dias</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_atual">Mês atual</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_anterior">Mês anterior</button>
+
+      <!-- Recebido -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-success"
+             style="cursor:pointer"
+             onclick="window.location='<?php echo htmlspecialchars($urlFinRecebido); ?>'">
+          <div class="kpi-top">
+            <div class="kpi-title">Recebido</div>
+            <div class="kpi-icon"><i class="bi bi-bank"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo money_br($total_recebido); ?>
+          </div>
+          <div class="kpi-sub">
+            <?php
+            if ($total_previsto > 0) {
+                echo $perc_recebido.'% do previsto';
+            } else {
+                echo 'sem previsão no período';
+            }
+            ?>
+          </div>
+          <div class="hf-progress">
+            <div class="bar" style="width:<?php echo $perc_recebido; ?>%"></div>
+          </div>
+        </div>
       </div>
-      <div>
-        <button type="submit" class="btn btn-sm btn-primary">
-          <i class="bi bi-funnel"></i> Aplicar
-        </button>
+
+      <!-- Em aberto -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-warning"
+             style="cursor:pointer"
+             onclick="window.location='<?php echo htmlspecialchars($urlFinAberto); ?>'">
+          <div class="kpi-top">
+            <div class="kpi-title">Em aberto</div>
+            <div class="kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo money_br($total_em_aberto); ?>
+          </div>
+          <div class="kpi-sub">a receber no período</div>
+          <div class="hf-progress">
+            <?php
+            $perc_aberto = ($total_previsto > 0) ? round(($total_em_aberto / $total_previsto) * 100) : 0;
+            ?>
+            <div class="bar" style="width:<?php echo $perc_aberto; ?>%"></div>
+          </div>
+        </div>
       </div>
-    </form>
+
+      <!-- Atrasado -->
+      <div class="col-12 col-md-6 col-lg-3">
+        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-danger"
+             style="cursor:pointer"
+             onclick="window.location='<?php echo htmlspecialchars($urlFinAtrasado); ?>'">
+          <div class="kpi-top">
+            <div class="kpi-title">Atrasado</div>
+            <div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+          </div>
+          <div class="kpi-value">
+            <?php echo money_br($total_atrasado); ?>
+          </div>
+          <div class="kpi-sub">vencido e não pago</div>
+          <div class="hf-progress">
+            <?php
+            $baseAtr = max($total_previsto, $total_em_aberto, 1);
+            $perc_atrasado = round(($total_atrasado / $baseAtr) * 100);
+            ?>
+            <div class="bar" style="width:<?php echo $perc_atrasado; ?>%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== GRÁFICO OS x RECEBIDO ===== -->
+    <div class="hf-card hf-dashboard-chart-card">
+      <div class="hf-chart-head">
+        <div>
+          <h6 class="mb-0">OS x Recebido no período</h6>
+          <small class="text-muted">Comparativo diário de volume operacional e valor recebido.</small>
+        </div>
+        <small class="text-muted hf-chart-period">
+          <?php echo htmlspecialchars(date('d/m/Y', strtotime($data_ini)) . ' a ' . date('d/m/Y', strtotime($data_fim))); ?>
+          <?php if ($tecnico_id > 0): ?>
+            • Técnico filtrado
+          <?php endif; ?>
+        </small>
+      </div>
+      <canvas id="graficoOsFin" style="max-height:320px;"></canvas>
+    </div>
+    <?php endif; // !$isAtendenteOnly ?>
+
   </div>
-
-  <!-- ===== LINHA 1: OS ===== -->
-  <div class="row g-3 mb-3">
-    <!-- Total OS -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi"
-           style="cursor:pointer"
-           onclick="window.location='<?php echo htmlspecialchars($urlTotalOs); ?>'">
-        <div class="kpi-title">Total OS</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-clipboard-data"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo number_format($total_os, 0, ',', '.'); ?>
-            </div>
-            <div class="kpi-sub">
-              <?php echo $usaPeriodoOs ? 'no período' : 'todas as OS'; ?>
-              <?php if ($var_total_os !== null): ?>
-                  <span class="ms-1 small <?php echo $var_total_os >= 0 ? 'text-success' : 'text-danger'; ?>">
-                    <i class="bi bi-arrow-<?php echo $var_total_os >= 0 ? 'up' : 'down'; ?>-short"></i>
-                    <?php echo ($var_total_os >= 0 ? '+' : '').$var_total_os; ?>%
-                  </span>
-              <?php endif; ?>
-            </div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <div class="bar" style="width:100%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Pendentes -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi kpi-danger"
-           style="cursor:pointer"
-           onclick="window.location='<?php echo htmlspecialchars($urlPendentes); ?>'">
-        <div class="kpi-title">Pendentes</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo number_format($pendentes, 0, ',', '.'); ?>
-            </div>
-            <div class="kpi-sub">
-              <?php
-              if ($total_os > 0) {
-                  echo $perc_pendentes.'% das OS';
-              } else {
-                  echo 'sem OS no período';
-              }
-              ?>
-              <?php if ($var_pendentes !== null): ?>
-                  <span class="ms-1 small <?php echo $var_pendentes <= 0 ? 'text-success' : 'text-danger'; ?>">
-                    <i class="bi bi-arrow-<?php echo $var_pendentes <= 0 ? 'down' : 'up'; ?>-short"></i>
-                    <?php echo ($var_pendentes >= 0 ? '+' : '').$var_pendentes; ?>%
-                  </span>
-              <?php endif; ?>
-            </div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <div class="bar" style="width:<?php echo $perc_pendentes; ?>%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Concluídas -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi kpi-success"
-           style="cursor:pointer"
-           onclick="window.location='<?php echo htmlspecialchars($urlConcluidas); ?>'">
-        <div class="kpi-title">Concluídas</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-check2-circle"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo number_format($concluidas, 0, ',', '.'); ?>
-            </div>
-            <div class="kpi-sub">
-              <?php
-              if ($total_os > 0) {
-                  echo $perc_concluidas.'% das OS';
-              } else {
-                  echo 'sem OS no período';
-              }
-              ?>
-              <?php if ($var_concluidas !== null): ?>
-                  <span class="ms-1 small <?php echo $var_concluidas >= 0 ? 'text-success' : 'text-danger'; ?>">
-                    <i class="bi bi-arrow-<?php echo $var_concluidas >= 0 ? 'up' : 'down'; ?>-short"></i>
-                    <?php echo ($var_concluidas >= 0 ? '+' : '').$var_concluidas; ?>%
-                  </span>
-              <?php endif; ?>
-            </div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <div class="bar" style="width:<?php echo $perc_concluidas; ?>%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- SLA -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi kpi-warning">
-        <div class="kpi-title">SLA médio</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-speedometer2"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo $sla_formatado; ?>
-            </div>
-            <div class="kpi-sub">tempo médio de atendimento</div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <div class="bar" style="width:<?php echo $perc_sla; ?>%"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <?php if (!$isAtendenteOnly): ?>
-  <!-- ===== LINHA 2: FINANCEIRO ===== -->
-  <div class="row g-3 mb-4">
-    <!-- Total previsto -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi"
-           style="cursor:pointer"
-           onclick="window.location='<?php echo htmlspecialchars($urlFinPrevisto); ?>'">
-        <div class="kpi-title">Previsto no período</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-cash-stack"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo money_br($total_previsto); ?>
-            </div>
-            <div class="kpi-sub">títulos com vencimento no período</div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <div class="bar" style="width:100%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Recebido -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi kpi-success"
-           style="cursor:pointer"
-           onclick="window.location='<?php echo htmlspecialchars($urlFinRecebido); ?>'">
-        <div class="kpi-title">Recebido</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-bank"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo money_br($total_recebido); ?>
-            </div>
-            <div class="kpi-sub">
-              <?php
-              if ($total_previsto > 0) {
-                  echo $perc_recebido.'% do previsto';
-              } else {
-                  echo 'sem previsão no período';
-              }
-              ?>
-            </div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <div class="bar" style="width:<?php echo $perc_recebido; ?>%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Em aberto -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi kpi-warning"
-           style="cursor:pointer"
-           onclick="window.location='<?php echo htmlspecialchars($urlFinAberto); ?>'">
-        <div class="kpi-title">Em aberto</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo money_br($total_em_aberto); ?>
-            </div>
-            <div class="kpi-sub">a receber no período</div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <?php
-          $perc_aberto = ($total_previsto > 0) ? round(($total_em_aberto / $total_previsto) * 100) : 0;
-          ?>
-          <div class="bar" style="width:<?php echo $perc_aberto; ?>%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Atrasado -->
-    <div class="col-12 col-md-6 col-lg-3">
-      <div class="hf-card hf-kpi kpi-danger"
-           style="cursor:pointer"
-           onclick="window.location='<?php echo htmlspecialchars($urlFinAtrasado); ?>'">
-        <div class="kpi-title">Atrasado</div>
-        <div class="kpi-row">
-          <div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
-          <div>
-            <div class="kpi-value">
-              <?php echo money_br($total_atrasado); ?>
-            </div>
-            <div class="kpi-sub">vencido e não pago</div>
-          </div>
-        </div>
-        <div class="hf-progress">
-          <?php
-          $baseAtr = max($total_previsto, $total_em_aberto, 1);
-          $perc_atrasado = round(($total_atrasado / $baseAtr) * 100);
-          ?>
-          <div class="bar" style="width:<?php echo $perc_atrasado; ?>%"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== GRÁFICO OS x RECEBIDO ===== -->
-  <div class="hf-card">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <h6 class="mb-0">OS x Recebido no período</h6>
-      <small class="text-muted">
-        <?php echo htmlspecialchars(date('d/m/Y', strtotime($data_ini)) . ' a ' . date('d/m/Y', strtotime($data_fim))); ?>
-        <?php if ($tecnico_id > 0): ?>
-          • Técnico filtrado
-        <?php endif; ?>
-      </small>
-    </div>
-    <canvas id="graficoOsFin" style="max-height:320px;"></canvas>
-  </div>
-  <?php endif; // !$isAtendenteOnly ?>
 </main>
+
+<style>
+.hf-dashboard-page {
+  min-height: calc(100vh - var(--topbar-h));
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .10), transparent 28rem),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+}
+
+.hf-dashboard-wrap {
+  max-width: 1480px;
+}
+
+.hf-dashboard-top {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+}
+
+.hf-dashboard-title {
+  padding: .25rem .1rem .55rem;
+}
+
+.hf-page-kicker {
+  font-size: .74rem;
+  font-weight: 800;
+  color: rgba(var(--bs-primary-rgb), .88);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: .12rem;
+}
+
+.hf-page-subtitle {
+  margin-top: .2rem;
+  color: #64748b;
+  font-size: .9rem;
+}
+
+.hf-dashboard-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .55rem;
+  padding: .75rem;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+  backdrop-filter: blur(8px);
+}
+
+.hf-dashboard-filter .form-label {
+  color: #64748b;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.hf-dashboard-filter .form-control,
+.hf-dashboard-filter .form-select {
+  min-height: 34px;
+  border-radius: .65rem;
+  border-color: #dbe3ee;
+  background-color: #f8fafc;
+}
+
+.hf-dashboard-filter .form-control:focus,
+.hf-dashboard-filter .form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), .55);
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
+  background-color: #fff;
+}
+
+.hf-filter-field {
+  min-width: 138px;
+}
+
+.hf-preset-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  padding-bottom: .05rem;
+}
+
+.hf-preset-group .btn,
+.hf-btn-apply {
+  border-radius: .65rem;
+  font-weight: 750;
+}
+
+.hf-btn-apply {
+  min-height: 34px;
+  box-shadow: 0 8px 18px rgba(var(--bs-primary-rgb), .16);
+}
+
+.hf-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  margin: 1.15rem 0 .7rem;
+}
+
+.hf-section-heading h5 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.hf-section-heading p {
+  margin: .18rem 0 0;
+  color: #64748b;
+  font-size: .86rem;
+}
+
+.hf-dashboard-kpi {
+  position: relative;
+  min-height: 178px;
+  padding: 1.05rem;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+.hf-dashboard-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .11);
+  border-color: rgba(var(--bs-primary-rgb), .24);
+}
+
+.hf-dashboard-kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--kpi-color, var(--bs-primary));
+  opacity: .9;
+}
+
+.hf-dashboard-kpi .kpi-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: .8rem;
+}
+
+.hf-dashboard-kpi .kpi-title {
+  margin: 0;
+  color: #64748b;
+  font-size: .76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+
+.hf-dashboard-kpi .kpi-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: .85rem;
+  color: var(--kpi-color, var(--bs-primary));
+  background: var(--kpi-soft, rgba(var(--bs-primary-rgb), .10));
+  font-size: 1.15rem;
+}
+
+.hf-dashboard-kpi .kpi-value {
+  color: #0f172a;
+  font-size: clamp(1.45rem, 2.3vw, 1.9rem);
+  font-weight: 900;
+  line-height: 1.08;
+  word-break: break-word;
+}
+
+.hf-dashboard-kpi .kpi-sub {
+  min-height: 28px;
+  margin-top: .38rem;
+  color: #64748b;
+  font-size: .84rem;
+}
+
+.hf-dashboard-kpi .hf-progress {
+  height: 5px;
+  margin-top: 1.05rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .18);
+  overflow: hidden;
+}
+
+.hf-dashboard-kpi .hf-progress .bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--kpi-color, var(--bs-primary));
+}
+
+.hf-dashboard-kpi.kpi-primary {
+  --kpi-color: var(--bs-primary);
+  --kpi-soft: rgba(var(--bs-primary-rgb), .10);
+}
+
+.hf-dashboard-kpi.kpi-success {
+  --kpi-color: #16a34a;
+  --kpi-soft: rgba(22, 163, 74, .12);
+}
+
+.hf-dashboard-kpi.kpi-danger {
+  --kpi-color: #dc2626;
+  --kpi-soft: rgba(220, 38, 38, .11);
+}
+
+.hf-dashboard-kpi.kpi-warning {
+  --kpi-color: #d97706;
+  --kpi-soft: rgba(245, 158, 11, .14);
+}
+
+.hf-dashboard-chart-card {
+  padding: 1.1rem;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+}
+
+.hf-chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.hf-chart-head h6 {
+  color: #0f172a;
+  font-weight: 850;
+}
+
+.hf-chart-period {
+  white-space: nowrap;
+}
+
+@media (max-width: 991.98px) {
+  .hf-dashboard-top {
+    grid-template-columns: 1fr;
+  }
+
+  .hf-dashboard-filter {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .hf-dashboard-page {
+    padding-left: .25rem;
+    padding-right: .25rem;
+  }
+
+  .hf-dashboard-filter {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .hf-filter-field {
+    min-width: 0;
+  }
+
+  .hf-preset-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hf-btn-apply {
+    width: 100%;
+  }
+
+  .hf-dashboard-kpi {
+    min-height: auto;
+  }
+
+  .hf-chart-head {
+    flex-direction: column;
+  }
+
+  .hf-chart-period {
+    white-space: normal;
+  }
+}
+
+[data-bs-theme="dark"] .hf-dashboard-page {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .16), transparent 28rem),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+[data-bs-theme="dark"] .hf-dashboard-filter,
+[data-bs-theme="dark"] .hf-dashboard-kpi,
+[data-bs-theme="dark"] .hf-dashboard-chart-card {
+  background: rgba(17, 24, 39, .9);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-section-heading h5,
+[data-bs-theme="dark"] .hf-dashboard-kpi .kpi-value,
+[data-bs-theme="dark"] .hf-chart-head h6 {
+  color: #e5e7eb;
+}
+
+[data-bs-theme="dark"] .hf-dashboard-filter .form-control,
+[data-bs-theme="dark"] .hf-dashboard-filter .form-select {
+  background-color: rgba(15, 23, 42, .9);
+  border-color: rgba(148, 163, 184, .24);
+}
+</style>
 
 <?php include __DIR__.'/_layout_end.php'; ?>
 

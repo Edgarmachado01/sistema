@@ -59,398 +59,616 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success','cancelada'=>'dark'];
 ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
+<main class="hf-content hf-os-page">
+  <div class="container-fluid py-4 hf-os-wrap">
 
-<main class="hf-content os-page" style="overflow-x:hidden;">
-  <div class="os-hero mb-3">
-    <div>
-      <div class="text-muted small text-uppercase fw-semibold">Ordens de Serviço</div>
-      <h4 class="mb-1">Atendimento e execução</h4>
-      <div class="text-muted small">
-        <?= (int)$total ?> registro<?= $total === 1 ? '' : 's' ?> encontrado<?= $total === 1 ? '' : 's' ?>
+    <div class="hf-os-top mb-3">
+      <div class="hf-os-title">
+        <div class="hf-page-kicker">Operação</div>
+        <h4 class="mb-0">Ordens de Serviço</h4>
+        <div class="hf-page-subtitle">Acompanhe atendimentos, status, técnico e financeiro das OS.</div>
+      </div>
+
+      <div class="hf-os-actions">
+        <form class="hf-os-filter" method="get">
+          <div class="hf-filter-input">
+            <i class="bi bi-search"></i>
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" class="form-control form-control-sm" placeholder="Nº OS ou Cliente">
+          </div>
+
+          <select name="status" class="form-select form-select-sm">
+            <option value="">Status (todos)</option>
+            <?php foreach (['aberta','em_andamento','concluida','cancelada'] as $s): ?>
+              <option value="<?= $s ?>" <?= $status===$s?'selected':'' ?>><?= ucfirst(str_replace('_',' ',$s)) ?></option>
+            <?php endforeach; ?>
+          </select>
+
+          <button class="btn btn-primary btn-sm hf-btn-filter" title="Buscar">
+            <i class="bi bi-search"></i>
+          </button>
+        </form>
+
+        <a href="/os_form.php"
+           class="btn btn-success btn-sm hf-btn-new-os d-none d-md-inline-flex">
+          <i class="bi bi-plus-lg me-1"></i><span>Nova OS</span>
+        </a>
       </div>
     </div>
 
-    <a href="/os_form.php" class="btn btn-primary btn-sm d-none d-md-inline-flex align-items-center gap-1">
-      <i class="bi bi-plus-lg"></i>
-      <span>Nova OS</span>
-    </a>
-  </div>
-
-  <div class="hf-card os-filter-card p-3 mb-3">
-    <form class="row g-2 align-items-end" method="get">
-      <div class="col-12 col-md-5">
-        <label class="form-label small text-muted mb-1">Buscar</label>
-        <div class="input-group input-group-sm">
-          <span class="input-group-text"><i class="bi bi-search"></i></span>
-          <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" class="form-control" placeholder="Nº OS ou cliente">
-        </div>
-      </div>
-
-      <div class="col-8 col-md-3">
-        <label class="form-label small text-muted mb-1">Status</label>
-        <select name="status" class="form-select form-select-sm">
-          <option value="">Todos</option>
-          <?php foreach (['aberta','em_andamento','concluida','cancelada'] as $s): ?>
-            <option value="<?= $s ?>" <?= $status===$s?'selected':'' ?>><?= ucfirst(str_replace('_',' ',$s)) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-
-      <div class="col-4 col-md-auto">
-        <button class="btn btn-primary btn-sm w-100">
-          Filtrar
-        </button>
-      </div>
-
-      <?php if ($q !== '' || $status !== ''): ?>
-        <div class="col-12 col-md-auto">
-          <a class="btn btn-outline-secondary btn-sm w-100" href="/os_list.php">
-            Limpar
-          </a>
-        </div>
-      <?php endif; ?>
-    </form>
-  </div>
-
-  <div class="hf-card p-0 os-list-modern">
-    <div class="table-responsive">
-      <table class="table align-middle mb-0" id="osTable">
-        <thead>
-          <tr>
-            <th style="width:90px">OS</th>
-            <th>Cliente</th>
-            <th>Status</th>
-            <th>Financeiro</th>
-            <th>Prioridade</th>
-            <th>Técnico</th>
-            <th>Abertura</th>
-            <th class="text-end">Total</th>
-            <th class="text-end" style="width:150px">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php if(!$rows): ?>
+    <!-- Lista -->
+    <div class="hf-card p-0 hf-os-list">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" id="osTable">
+          <thead class="table-light">
             <tr>
-              <td colspan="9" class="text-center text-muted py-5">
-                <div class="mb-2"><i class="bi bi-inbox fs-3"></i></div>
-                Nenhuma OS encontrada.
-              </td>
+              <th style="width:90px">Nº</th>
+              <th>Cliente</th>
+              <th>Status</th>
+              <th>Financeiro</th>
+              <th>Prioridade</th>
+              <th>Técnico</th>
+              <th>Abertura</th>
+              <th class="text-end">Total (R$)</th>
+              <th class="text-end" style="width:140px">Ações</th>
             </tr>
-          <?php else: foreach($rows as $r):
-            $label = ucfirst(str_replace('_',' ',$r['status']));
-            $num   = (int)($r['numero'] ?? $r['id']);
-            $dtAb  = $r['data_abertura'] ? date('d/m/Y H:i', strtotime($r['data_abertura'])) : '-';
-            $tot   = number_format((float)$r['total'],2,',','.');
-            $fin  = $r['status_financeiro'] ?? 'pendente';
-            $badgeFinMap = [
-              'pendente' => 'secondary',
-              'parcial'  => 'warning',
-              'pago'     => 'success',
-            ];
-            $finLabel = ucfirst($fin);
-            $finClass = $badgeFinMap[$fin] ?? 'secondary';
+          </thead>
+          <tbody>
+            <?php if(!$rows): ?>
+              <tr><td colspan="9" class="text-center text-muted py-4">Nenhuma OS encontrada.</td></tr>
+            <?php else: foreach($rows as $r):
+              $label = ucfirst(str_replace('_',' ',$r['status']));
+              $num   = (int)($r['numero'] ?? $r['id']);
+              $dtAb  = $r['data_abertura'] ? date('d/m/Y H:i', strtotime($r['data_abertura'])) : '-';
+              $tot   = number_format((float)$r['total'],2,',','.');
+              $fin  = $r['status_financeiro'] ?? 'pendente';
+              $badgeFinMap = [
+                'pendente' => 'secondary',
+                'parcial'  => 'warning',
+                'pago'     => 'success',
+              ];
+              $finLabel = ucfirst($fin);
+              $finClass = $badgeFinMap[$fin] ?? 'secondary';
+            ?>
+              <tr class="os-row">
+                <td data-label="Nº"><span class="hf-os-number">#<?= $num ?></span></td>
+                <td data-label="Cliente">
+                  <div class="hf-client-cell">
+                    <div class="hf-client-avatar">
+                      <?= strtoupper(substr((string)$r['cliente'], 0, 1)) ?>
+                    </div>
+                    <div class="hf-client-name"><?= htmlspecialchars($r['cliente']) ?></div>
+                  </div>
+                </td>
+                <td data-label="Status">
+                  <span class="badge bg-<?= $badge[$r['status'] ?? 'secondary'] ?> hf-status-badge"><?= $label ?></span>
+                </td>
+                <td data-label="Financeiro">
+                  <span class="badge bg-<?= $finClass ?> hf-status-badge"><?= $finLabel ?></span>
+                </td>
+                <td data-label="Prioridade"><?= htmlspecialchars(ucfirst($r['prioridade'] ?? '')) ?></td>
+                <td data-label="Técnico"><?= htmlspecialchars($r['tecnico'] ?? '') ?></td>
+                <td data-label="Abertura"><span class="hf-date-pill"><?= $dtAb ?></span></td>
+                <td data-label="Total" class="text-end fw-semibold hf-total-cell"><?= $tot ?></td>
+                <td data-label="Ações" class="text-end">
+                  <div class="d-inline-flex gap-1 hf-action-group">
+                    <!-- Documento / Impressão -->
+                    <a class="btn btn-sm btn-outline-secondary hf-action-btn"
+                       href="/os_documento.php?id=<?= (int)$r['id'] ?>"
+                       target="_blank"
+                       title="Documento / Impressão">
+                      <i class="bi bi-file-earmark-text"></i>
+                    </a>
 
-            $prioridade = strtolower((string)($r['prioridade'] ?? ''));
-            $prioClass = [
-              'baixa' => 'success',
-              'media' => 'warning',
-              'alta'  => 'danger',
-            ][$prioridade] ?? 'secondary';
-          ?>
-            <tr class="os-row">
-              <td data-label="OS">
-                <div class="os-number">#<?= $num ?></div>
-              </td>
+                    <!-- Editar -->
+                    <a class="btn btn-sm btn-outline-primary hf-action-btn"
+                       href="/os_form.php?id=<?= (int)$r['id'] ?>"
+                       title="Editar">
+                      <i class="bi bi-pencil-square"></i>
+                    </a>
 
-              <td data-label="Cliente">
-                <div class="fw-semibold"><?= htmlspecialchars($r['cliente']) ?></div>
-                <div class="text-muted small d-md-none"><?= $dtAb ?></div>
-              </td>
-
-              <td data-label="Status">
-                <span class="os-pill os-pill-<?= htmlspecialchars($r['status'] ?? 'secondary') ?>">
-                  <?= $label ?>
-                </span>
-              </td>
-
-              <td data-label="Financeiro">
-                <span class="badge rounded-pill text-bg-<?= $finClass ?>">
-                  <?= $finLabel ?>
-                </span>
-              </td>
-
-              <td data-label="Prioridade">
-                <span class="badge rounded-pill text-bg-<?= $prioClass ?>">
-                  <?= htmlspecialchars(ucfirst($r['prioridade'] ?? '')) ?>
-                </span>
-              </td>
-
-              <td data-label="Técnico">
-                <?= htmlspecialchars($r['tecnico'] ?: '-') ?>
-              </td>
-
-              <td data-label="Abertura">
-                <?= $dtAb ?>
-              </td>
-
-              <td data-label="Total" class="text-end">
-                <strong>R$ <?= $tot ?></strong>
-              </td>
-
-              <td data-label="Ações" class="text-end">
-                <div class="os-actions">
-                  <a class="btn btn-sm btn-light border"
-                     href="/os_documento.php?id=<?= (int)$r['id'] ?>"
-                     target="_blank"
-                     title="Documento / Impressão">
-                    <i class="bi bi-file-earmark-text"></i>
-                  </a>
-
-                  <a class="btn btn-sm btn-primary"
-                     href="/os_form.php?id=<?= (int)$r['id'] ?>"
-                     title="Editar">
-                    <i class="bi bi-pencil-square"></i>
-                  </a>
-
-                  <form method="post" action="/os_delete.php" class="d-inline m-0 p-0" onsubmit="return confirm('Confirma excluir (soft delete)?');">
-                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-          <?php endforeach; endif; ?>
-        </tbody>
-      </table>
+                    <!-- Excluir -->
+                    <form method="post" action="/os_delete.php" class="d-inline m-0 p-0" onsubmit="return confirm('Confirma excluir (soft delete)?');">
+                      <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                      <button type="submit" class="btn btn-sm btn-outline-danger hf-action-btn hf-delete-btn" title="Excluir">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            <?php endforeach; endif; ?>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
 
-  <?php if($pages>1): ?>
-    <nav class="mt-3">
-      <ul class="pagination pagination-sm mb-0">
-        <?php for($i=1;$i<=$pages;$i++):
-          $url='?'.http_build_query(['q'=>$q,'status'=>$status,'pg'=>$i]); ?>
-          <li class="page-item <?= $i===$pg?'active':'' ?>">
-            <a class="page-link" href="<?= $url ?>"><?= $i ?></a>
-          </li>
-        <?php endfor; ?>
-      </ul>
-    </nav>
-  <?php endif; ?>
+    <?php if($pages>1): ?>
+      <nav class="mt-3">
+        <ul class="pagination pagination-sm mb-0 hf-pagination">
+          <?php for($i=1;$i<=$pages;$i++):
+            $url='?'.http_build_query(['q'=>$q,'status'=>$status,'pg'=>$i]); ?>
+            <li class="page-item <?= $i===$pg?'active':'' ?>">
+              <a class="page-link" href="<?= $url ?>"><?= $i ?></a>
+            </li>
+          <?php endfor; ?>
+        </ul>
+      </nav>
+    <?php endif; ?>
+
+  </div>
 </main>
 
+<!-- FAB (mobile) -->
 <a href="/os_form.php" class="btn btn-primary rounded-circle shadow fab-new-os d-md-none" title="Nova OS">
   <i class="bi bi-plus-lg"></i>
 </a>
 
-<?php require_once __DIR__.'/_layout_end.php'; ?>
-
 <style>
-.os-page{
+.hf-os-page {
+  min-height: calc(100vh - var(--topbar-h));
+  overflow-x: hidden;
   background:
-    radial-gradient(circle at top right, rgba(var(--bs-primary-rgb), .08), transparent 34rem),
-    linear-gradient(180deg, rgba(var(--bs-primary-rgb), .03), transparent 18rem);
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .10), transparent 28rem),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
 }
-.os-hero{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:1rem;
-  padding:1rem 1.1rem;
-  border:1px solid rgba(0,0,0,.06);
-  border-radius:18px;
-  background:rgba(255,255,255,.78);
-  box-shadow:0 8px 24px rgba(15,23,42,.06);
+
+.hf-os-wrap {
+  max-width: 1480px;
 }
-[data-bs-theme="dark"] .os-hero{
-  background:rgba(33,37,41,.72);
-  border-color:rgba(255,255,255,.08);
+
+.hf-os-top {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
 }
-.os-filter-card{
-  border-radius:16px;
+
+.hf-os-title {
+  padding: .25rem .1rem .55rem;
 }
-.os-filter-card .input-group-text{
-  background:var(--bs-body-bg);
+
+.hf-page-kicker {
+  font-size: .74rem;
+  font-weight: 800;
+  color: rgba(var(--bs-primary-rgb), .88);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: .12rem;
 }
-.os-list-modern{
-  overflow:hidden;
-  border-radius:18px;
+
+.hf-page-subtitle {
+  margin-top: .2rem;
+  color: #64748b;
+  font-size: .9rem;
 }
-.os-list-modern table{
-  --bs-table-hover-bg:rgba(var(--bs-primary-rgb), .045);
+
+.hf-os-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .55rem;
 }
-.os-list-modern thead th{
-  padding:.85rem .9rem;
-  background:rgba(var(--bs-primary-rgb), .06);
-  color:var(--bs-secondary-color);
-  font-size:.76rem;
-  letter-spacing:.04em;
-  text-transform:uppercase;
-  border-bottom:1px solid rgba(0,0,0,.06);
+
+.hf-os-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .45rem;
+  padding: .55rem;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+  backdrop-filter: blur(8px);
 }
-.os-list-modern tbody td{
-  padding:.9rem;
-  border-color:rgba(0,0,0,.055);
+
+.hf-os-filter .form-control,
+.hf-os-filter .form-select {
+  min-height: 34px;
+  border-radius: .65rem;
+  border-color: #dbe3ee;
+  background-color: #f8fafc;
 }
-.os-row{
-  transition:background .15s ease, transform .15s ease;
+
+.hf-os-filter .form-control:focus,
+.hf-os-filter .form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), .55);
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
+  background-color: #fff;
 }
-.os-row:hover{
-  transform:translateY(-1px);
+
+.hf-filter-input {
+  position: relative;
 }
-.os-number{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:58px;
-  padding:.3rem .55rem;
-  border-radius:999px;
-  background:rgba(var(--bs-primary-rgb), .09);
-  color:var(--bs-primary);
-  font-weight:700;
+
+.hf-filter-input > i {
+  position: absolute;
+  left: .7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
 }
-.os-pill{
-  display:inline-flex;
-  align-items:center;
-  min-height:24px;
-  padding:.22rem .58rem;
-  border-radius:999px;
-  font-size:.78rem;
-  font-weight:700;
-  line-height:1;
-  white-space:nowrap;
+
+.hf-filter-input .form-control {
+  width: 220px;
+  padding-left: 2rem;
 }
-.os-pill-aberta{
-  background:rgba(108,117,125,.13);
-  color:#5c636a;
+
+.hf-btn-filter,
+.hf-btn-new-os {
+  min-height: 34px;
+  border-radius: .65rem;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(var(--bs-primary-rgb), .16);
 }
-.os-pill-em_andamento{
-  background:rgba(255,193,7,.22);
-  color:#8a6500;
+
+.hf-btn-new-os {
+  align-items: center;
+  padding-left: .78rem;
+  padding-right: .78rem;
 }
-.os-pill-concluida{
-  background:rgba(25,135,84,.15);
-  color:#147044;
+
+.fab-new-os {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  z-index: 1050;
 }
-.os-pill-cancelada{
-  background:rgba(33,37,41,.14);
-  color:#212529;
+
+.hf-os-list {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
 }
-[data-bs-theme="dark"] .os-pill-aberta{ color:#cbd3da; }
-[data-bs-theme="dark"] .os-pill-cancelada{ color:#e9ecef; }
-.os-actions{
-  display:inline-flex;
-  align-items:center;
-  justify-content:flex-end;
-  gap:.35rem;
+
+.hf-os-list table {
+  --bs-table-bg: transparent;
 }
-.os-actions .btn{
-  width:32px;
-  height:32px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:10px;
-  padding:0;
+
+.hf-os-list thead th {
+  padding: .95rem .9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, .28);
+  background: #f1f5f9;
+  color: #475569;
+  font-size: .74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+  white-space: nowrap;
 }
-.fab-new-os{
-  position:fixed;
-  right:16px;
-  bottom:16px;
-  width:56px;
-  height:56px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:1.25rem;
-  z-index:1050;
+
+.hf-os-list tbody td {
+  padding: .9rem;
+  border-color: rgba(226, 232, 240, .82);
+  color: #334155;
 }
-@media (min-width:768px){
-  .os-list-modern table{
-    table-layout:fixed;
+
+.hf-os-list tbody tr {
+  transition: background-color .14s ease, box-shadow .14s ease;
+}
+
+.hf-os-list tbody tr:hover {
+  background: rgba(var(--bs-primary-rgb), .045);
+  box-shadow: inset 3px 0 0 rgba(var(--bs-primary-rgb), .56);
+}
+
+.hf-os-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.6rem;
+  padding: .24rem .55rem;
+  border-radius: 999px;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .10);
+  font-weight: 900;
+}
+
+.hf-client-cell {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.hf-client-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .11);
+  font-weight: 900;
+}
+
+.hf-client-name {
+  min-width: 0;
+  max-width: 100%;
+  color: #0f172a;
+  font-size: .9rem;
+  font-weight: 600;
+  line-height: 1.32;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hf-date-pill {
+  color: #475569;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.hf-total-cell {
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.hf-status-badge {
+  border-radius: 999px;
+  padding: .42rem .62rem;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+.hf-status-badge.bg-warning {
+  color: #8a4b00 !important;
+  background: #fff3cd !important;
+}
+
+.hf-status-badge.bg-success {
+  color: #047857 !important;
+  background: #d1fae5 !important;
+}
+
+.hf-status-badge.bg-secondary {
+  color: #475569 !important;
+  background: #e2e8f0 !important;
+}
+
+.hf-status-badge.bg-dark {
+  color: #475569 !important;
+  background: #cbd5e1 !important;
+}
+
+.hf-action-group {
+  white-space: nowrap;
+}
+
+.hf-action-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: .65rem;
+  background: rgba(var(--bs-primary-rgb), .04);
+  border-color: rgba(var(--bs-primary-rgb), .28);
+  font-weight: 800;
+}
+
+.hf-action-btn:hover {
+  color: #fff;
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+.hf-action-btn.btn-outline-secondary {
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #dbe3ee;
+}
+
+.hf-action-btn.btn-outline-secondary:hover {
+  color: #fff;
+  background: #64748b;
+  border-color: #64748b;
+}
+
+.hf-delete-btn {
+  color: #dc2626;
+  background: #fff5f5;
+  border-color: #fecaca;
+}
+
+.hf-delete-btn:hover {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.hf-pagination .page-link {
+  border-radius: .55rem;
+  margin-right: .25rem;
+  border-color: rgba(148, 163, 184, .35);
+  font-weight: 750;
+}
+@media (max-width: 767.98px) {
+  .hf-client-name {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: .92rem;
+    line-height: 1.35;
   }
 }
-@media (max-width:767.98px){
-  .os-hero{
-    align-items:flex-start;
-    padding:.9rem;
+
+@media (min-width: 768px) {
+  .hf-os-list table {
+    table-layout: fixed;
   }
-  .os-list-modern{
-    background:transparent;
-    border:0;
-    box-shadow:none;
+}
+
+@media (max-width: 991.98px) {
+  .hf-os-top {
+    grid-template-columns: 1fr;
   }
-  .os-list-modern .table-responsive{
-    overflow-x:visible;
+
+  .hf-os-actions {
+    justify-content: stretch;
   }
-  .os-list-modern table,
-  .os-list-modern thead,
-  .os-list-modern tbody,
-  .os-list-modern th,
-  .os-list-modern td,
-  .os-list-modern tr{
-    display:block;
-    width:100%;
-    box-sizing:border-box;
+
+  .hf-os-filter {
+    width: 100%;
   }
-  .os-list-modern thead{
-    display:none;
+}
+
+@media (max-width: 767.98px) {
+  .hf-os-page {
+    padding-left: .25rem;
+    padding-right: .25rem;
   }
-  .os-list-modern tbody tr.os-row{
-    border:1px solid rgba(0,0,0,.08);
-    border-radius:16px;
-    padding:.85rem;
-    margin:.75rem 0;
-    background:var(--bs-body-bg);
-    box-shadow:0 8px 20px rgba(15,23,42,.07);
+
+  .hf-btn-new-os {
+    display: none !important;
   }
-  .os-list-modern tbody td{
-    display:grid;
-    grid-template-columns:minmax(94px, 38%) 1fr;
-    align-items:center;
-    gap:.45rem;
-    padding:.38rem 0;
-    border:0!important;
-    word-break:break-word;
+
+  .hf-filter-input,
+  .hf-filter-input .form-control,
+  .hf-os-filter .form-select,
+  .hf-btn-filter {
+    width: 100%;
   }
-  .os-list-modern tbody td::before{
-    content:attr(data-label);
-    color:var(--bs-secondary-color);
-    font-size:.8rem;
-    font-weight:600;
+
+  .hf-os-list {
+    padding: .85rem;
   }
-  .os-list-modern td[data-label="Cliente"]{
-    display:block;
-    padding-bottom:.65rem;
-    margin-bottom:.35rem;
-    border-bottom:1px solid rgba(0,0,0,.06)!important;
+
+  .hf-os-list .table-responsive {
+    overflow-x: visible;
   }
-  .os-list-modern td[data-label="Cliente"]::before{
-    display:none;
+
+  .hf-os-list table,
+  .hf-os-list thead,
+  .hf-os-list tbody,
+  .hf-os-list th,
+  .hf-os-list td,
+  .hf-os-list tr {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
   }
-  .os-list-modern td[data-label="Total"]{
-    align-items:end;
+
+  .hf-os-list thead {
+    display: none;
   }
-  .os-list-modern td[data-label="Total"] strong{
-    color:var(--bs-primary);
-    font-size:1.05rem;
+
+  .hf-os-list tbody tr.os-row {
+    border: 1px solid rgba(226, 232, 240, .9);
+    border-radius: .95rem;
+    padding: .85rem;
+    margin: .75rem 0;
+    background: rgba(248, 250, 252, .82);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
   }
-  .os-list-modern td[data-label="Ações"]{
-    display:flex;
-    justify-content:flex-end;
-    margin-top:.45rem;
-    padding-top:.65rem;
-    border-top:1px solid rgba(0,0,0,.06)!important;
+
+  .hf-os-list tbody tr.os-row:hover {
+    box-shadow: 0 12px 28px rgba(15, 23, 42, .08);
   }
-  .os-list-modern td[data-label="Ações"]::before{
-    display:none;
+
+  .hf-os-list td {
+    display: grid;
+    grid-template-columns: minmax(94px, 38%) 1fr;
+    align-items: center;
+    gap: .55rem;
+    padding: .4rem 0;
+    border: 0 !important;
+    word-break: break-word;
   }
-  .os-actions .btn{
-    width:38px;
-    height:38px;
+
+  .hf-os-list td::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
   }
+
+  .hf-os-list td[data-label="Cliente"] {
+    grid-template-columns: 1fr;
+  }
+
+  .hf-os-list td[data-label="Cliente"]::before {
+    margin-bottom: .2rem;
+  }
+
+  .hf-client-cell {
+    align-items: flex-start;
+  }
+
+  .hf-os-list td[data-label="Ações"] {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin-top: .25rem;
+    padding-top: .75rem;
+    border-top: 1px solid rgba(226, 232, 240, .9) !important;
+  }
+
+  .hf-os-list td[data-label="Ações"]::before {
+    display: none;
+  }
+
+  .hf-total-cell {
+    color: var(--bs-primary);
+    font-size: 1.05rem;
+    font-weight: 900 !important;
+  }
+}
+
+[data-bs-theme="dark"] .hf-os-page {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .16), transparent 28rem),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+[data-bs-theme="dark"] .hf-os-filter,
+[data-bs-theme="dark"] .hf-os-list {
+  background: rgba(17, 24, 39, .9);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-os-filter .form-control,
+[data-bs-theme="dark"] .hf-os-filter .form-select {
+  background-color: rgba(15, 23, 42, .9);
+  border-color: rgba(148, 163, 184, .24);
+}
+
+[data-bs-theme="dark"] .hf-os-list thead th {
+  background: rgba(30, 41, 59, .95);
+  color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .hf-os-list tbody td,
+[data-bs-theme="dark"] .hf-date-pill {
+  color: #cbd5e1;
+  border-color: rgba(51, 65, 85, .9);
+}
+
+[data-bs-theme="dark"] .hf-client-name,
+[data-bs-theme="dark"] .hf-total-cell {
+  color: #e5e7eb;
+}
+
+[data-bs-theme="dark"] .hf-os-list tbody tr.os-row {
+  background: rgba(15, 23, 42, .82);
+  border-color: rgba(148, 163, 184, .18);
 }
 </style>
+
+<?php require_once __DIR__.'/_layout_end.php'; ?>
