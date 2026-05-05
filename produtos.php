@@ -44,73 +44,129 @@ $st->execute();
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
-<main class="hf-content" style="overflow-x:hidden;">
 
-  <!-- Título + filtros (padrão input-group) -->
-  <div class="d-flex flex-wrap align-items-center mb-3 gap-2">
-    <h4 class="mb-0 me-auto">Produtos</h4>
+<main class="hf-content produtos-page" style="overflow-x:hidden;">
+  <div class="produtos-hero mb-3">
+    <div>
+      <div class="text-muted small text-uppercase fw-semibold">Produtos</div>
+      <h4 class="mb-1">Catálogo de produtos</h4>
+      <div class="text-muted small">
+        <?= (int)$total ?> produto<?= $total === 1 ? '' : 's' ?> encontrado<?= $total === 1 ? '' : 's' ?>
+      </div>
+    </div>
 
-    <div id="prdFilters" class="filters-bar d-flex align-items-center gap-2 flex-grow-1 flex-md-grow-0">
-      <form class="filters-form d-flex align-items-center gap-2 flex-grow-1" method="get">
-        <div class="input-group input-group-sm flex-grow-1">
+    <a href="/produto_form.php" class="btn btn-primary btn-sm d-none d-md-inline-flex align-items-center gap-1">
+      <i class="bi bi-plus-lg"></i>
+      <span>Novo produto</span>
+    </a>
+  </div>
+
+  <div class="hf-card produtos-filter-card p-3 mb-3">
+    <form class="row g-2 align-items-end" method="get">
+      <div class="col-12 col-md-7 col-lg-6">
+        <label class="form-label small text-muted mb-1">Buscar</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
           <input type="text"
                  name="q"
                  value="<?= htmlspecialchars($q) ?>"
                  class="form-control"
-                 placeholder="Buscar nome, SKU, categoria, NCM...">
-          <button class="btn btn-primary" type="submit" title="Pesquisar">
-            <i class="bi bi-search"></i>
-          </button>
+                 placeholder="Nome, SKU, categoria ou NCM">
         </div>
-      </form>
+      </div>
 
-      <!-- Botão Novo (desktop) -->
-      <a href="/produto_form.php"
-         class="btn btn-success btn-sm btn-new d-none d-md-inline-flex">
-        <i class="bi bi-plus-lg me-1"></i><span>Novo</span>
-      </a>
-    </div>
+      <div class="col-6 col-md-auto">
+        <button class="btn btn-primary btn-sm w-100" type="submit">
+          Filtrar
+        </button>
+      </div>
+
+      <?php if ($q !== ''): ?>
+        <div class="col-6 col-md-auto">
+          <a class="btn btn-outline-secondary btn-sm w-100" href="/produtos.php">
+            Limpar
+          </a>
+        </div>
+      <?php endif; ?>
+    </form>
   </div>
 
-  <!-- Lista -->
-  <div class="hf-card p-0 prd-list">
+  <div class="hf-card p-0 produtos-list-modern">
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0" id="prdTable">
-        <thead class="table-light">
+      <table class="table align-middle mb-0" id="prdTable">
+        <thead>
           <tr>
-            <th>Nome</th>
+            <th>Produto</th>
             <th>SKU</th>
             <th>Categoria</th>
             <th>Un.</th>
-            <th class="text-end">Preço (R$)</th>
-            <th class="text-end">Custo (R$)</th>
+            <th class="text-end">Preço</th>
+            <th class="text-end">Custo</th>
             <th>Status</th>
-            <th class="text-end" style="width:120px">Ações</th>
+            <th class="text-end" style="width:130px">Ações</th>
           </tr>
         </thead>
         <tbody>
           <?php if (!$rows): ?>
-            <tr><td colspan="8" class="text-center text-muted py-4">Nenhum produto encontrado.</td></tr>
-          <?php else: foreach ($rows as $r): ?>
-            <tr class="prd-row">
-              <td data-label="Nome" class="fw-semibold" style="word-break:break-word;"><?= htmlspecialchars($r['nome']) ?></td>
-              <td data-label="SKU"><?= htmlspecialchars($r['sku'] ?? '') ?></td>
-              <td data-label="Categoria"><?= htmlspecialchars($r['categoria'] ?? '') ?></td>
-              <td data-label="Un."><?= htmlspecialchars($r['unidade'] ?? '') ?></td>
-              <td data-label="Preço (R$)" class="text-end"><?= number_format((float)$r['preco'],2,',','.') ?></td>
-              <td data-label="Custo (R$)" class="text-end"><?= number_format((float)$r['custo'],2,',','.') ?></td>
-              <td data-label="Status">
-                <?= ((int)$r['status']===1)
-                  ? '<span class="badge bg-success">Ativo</span>'
-                  : '<span class="badge bg-secondary">Inativo</span>' ?>
+            <tr>
+              <td colspan="8" class="text-center text-muted py-5">
+                <div class="mb-2"><i class="bi bi-box-seam fs-3"></i></div>
+                Nenhum produto encontrado.
               </td>
+            </tr>
+          <?php else: foreach ($rows as $r):
+            $ativo = (int)$r['status'] === 1;
+          ?>
+            <tr class="prd-row">
+              <td data-label="Produto">
+                <div class="produto-name"><?= htmlspecialchars($r['nome']) ?></div>
+                <?php if (!empty($r['categoria'])): ?>
+                  <div class="text-muted small d-md-none"><?= htmlspecialchars($r['categoria']) ?></div>
+                <?php endif; ?>
+              </td>
+
+              <td data-label="SKU">
+                <?= htmlspecialchars($r['sku'] ?: '-') ?>
+              </td>
+
+              <td data-label="Categoria">
+                <?= htmlspecialchars($r['categoria'] ?: '-') ?>
+              </td>
+
+              <td data-label="Un.">
+                <span class="badge rounded-pill text-bg-light border"><?= htmlspecialchars($r['unidade'] ?: '-') ?></span>
+              </td>
+
+              <td data-label="Preço" class="text-end">
+                <strong>R$ <?= number_format((float)$r['preco'],2,',','.') ?></strong>
+              </td>
+
+              <td data-label="Custo" class="text-end">
+                R$ <?= number_format((float)$r['custo'],2,',','.') ?>
+              </td>
+
+              <td data-label="Status">
+                <?php if ($ativo): ?>
+                  <span class="badge rounded-pill text-bg-success">Ativo</span>
+                <?php else: ?>
+                  <span class="badge rounded-pill text-bg-secondary">Inativo</span>
+                <?php endif; ?>
+              </td>
+
               <td data-label="Ações" class="text-end">
-                <div class="d-inline-flex gap-1">
-                  <a class="btn btn-sm btn-outline-primary" href="/produto_form.php?id=<?= (int)$r['id'] ?>" title="Editar"><i class="bi bi-pencil-square"></i></a>
+                <div class="produto-actions">
+                  <a class="btn btn-sm btn-primary"
+                     href="/produto_form.php?id=<?= (int)$r['id'] ?>"
+                     title="Editar">
+                    <i class="bi bi-pencil-square"></i>
+                  </a>
+
                   <form method="post" action="/produto_delete.php" class="d-inline m-0 p-0" onsubmit="return confirm('Confirma excluir (soft delete)?');">
                     <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                      <i class="bi bi-trash"></i>
+                    </button>
                   </form>
                 </div>
               </td>
@@ -135,7 +191,6 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
   <?php endif; ?>
 </main>
 
-<!-- FAB (mobile) -->
 <a href="/produto_form.php" class="btn btn-primary rounded-circle shadow fab-new d-md-none" title="Novo produto">
   <i class="bi bi-plus-lg"></i>
 </a>
@@ -143,77 +198,174 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 <?php require_once __DIR__.'/_layout_end.php'; ?>
 
 <style>
-/* ===== Barra de filtros enxuta ===== */
-.filters-bar{
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: #fff;
-  padding: .5rem .6rem;
-  border: 1px solid #e9ecef;
-  border-radius: .5rem;
+.produtos-page{
+  background:
+    radial-gradient(circle at top right, rgba(var(--bs-primary-rgb), .08), transparent 34rem),
+    linear-gradient(180deg, rgba(var(--bs-primary-rgb), .03), transparent 18rem);
 }
-.filters-form .btn{ white-space: nowrap; }
-
-/* Botão “Novo” compacto (desktop) */
-.btn-new{
-  align-self: center;
-  padding: .30rem .60rem;
-  border-radius: .5rem;
-  line-height: 1.1;
-  height: 1.8125rem;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+.produtos-hero{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:1rem;
+  padding:1rem 1.1rem;
+  border:1px solid rgba(0,0,0,.06);
+  border-radius:18px;
+  background:rgba(255,255,255,.78);
+  box-shadow:0 8px 24px rgba(15,23,42,.06);
 }
-
-/* FAB mobile */
+[data-bs-theme="dark"] .produtos-hero{
+  background:rgba(33,37,41,.72);
+  border-color:rgba(255,255,255,.08);
+}
+.produtos-filter-card{
+  border-radius:16px;
+}
+.produtos-filter-card .input-group-text{
+  background:var(--bs-body-bg);
+}
+.produtos-list-modern{
+  overflow:hidden;
+  border-radius:18px;
+}
+.produtos-list-modern table{
+  --bs-table-hover-bg:rgba(var(--bs-primary-rgb), .045);
+}
+.produtos-list-modern thead th{
+  padding:.85rem .9rem;
+  background:rgba(var(--bs-primary-rgb), .06);
+  color:var(--bs-secondary-color);
+  font-size:.76rem;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  border-bottom:1px solid rgba(0,0,0,.06);
+}
+.produtos-list-modern tbody td{
+  padding:.9rem;
+  border-color:rgba(0,0,0,.055);
+}
+.prd-row{
+  transition:background .15s ease, transform .15s ease;
+}
+.prd-row:hover{
+  transform:translateY(-1px);
+}
+.produto-name{
+  font-weight:700;
+  color:var(--bs-body-color);
+  word-break:break-word;
+}
+.produto-actions{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:.35rem;
+}
+.produto-actions .btn{
+  width:32px;
+  height:32px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:10px;
+  padding:0;
+}
 .fab-new{
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  width: 56px; height: 56px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.25rem;
-  z-index: 1050;
+  position:fixed;
+  right:16px;
+  bottom:16px;
+  width:56px;
+  height:56px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:1.25rem;
+  z-index:1050;
 }
-
-/* Desktop mantém tabela */
-@media (min-width: 768px){
-  .prd-list table{ table-layout: fixed; }
+@media (min-width:768px){
+  .produtos-list-modern table{
+    table-layout:fixed;
+  }
 }
-
-/* Mobile: cards e sem overflow lateral */
-@media (max-width: 767.98px){
-  .btn-new{ display: none !important; }
-  .prd-list .table-responsive{ overflow-x: visible; }
-
-  .prd-list table, .prd-list thead, .prd-list tbody,
-  .prd-list th, .prd-list td, .prd-list tr{
-    display: block; width: 100%; box-sizing: border-box;
+@media (max-width:767.98px){
+  .produtos-hero{
+    align-items:flex-start;
+    padding:.9rem;
   }
-  .prd-list thead{ display: none; }
-
-  .prd-list tbody tr.prd-row{
-    border: 1px solid #e9ecef; border-radius: .75rem;
-    padding: .75rem; margin: .65rem 0; background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  .produtos-list-modern{
+    background:transparent;
+    border:0;
+    box-shadow:none;
   }
-
-  .prd-list td{
-    display: grid; grid-template-columns: minmax(88px, 42%) 1fr;
-    align-items: center; gap: .4rem; padding: .3rem 0; border: 0!important;
-    word-break: break-word;
+  .produtos-list-modern .table-responsive{
+    overflow-x:visible;
   }
-  .prd-list td::before{ content: attr(data-label); font-size: .84rem; color: #6c757d; }
-
-  .prd-list td[data-label="Preço (R$)"],
-  .prd-list td[data-label="Custo (R$)"]{
-    justify-content: space-between;
+  .produtos-list-modern table,
+  .produtos-list-modern thead,
+  .produtos-list-modern tbody,
+  .produtos-list-modern th,
+  .produtos-list-modern td,
+  .produtos-list-modern tr{
+    display:block;
+    width:100%;
+    box-sizing:border-box;
   }
-
-  .prd-list td[data-label="Ações"]{
-    display:flex; justify-content:flex-end; gap:.5rem; margin-top:.25rem;
+  .produtos-list-modern thead{
+    display:none;
   }
-  .prd-list td[data-label="Ações"] .btn{ padding:.45rem .6rem; }
+  .produtos-list-modern tbody tr.prd-row{
+    border:1px solid rgba(0,0,0,.08);
+    border-radius:16px;
+    padding:.85rem;
+    margin:.75rem 0;
+    background:var(--bs-body-bg);
+    box-shadow:0 8px 20px rgba(15,23,42,.07);
+  }
+  .produtos-list-modern tbody td{
+    display:grid;
+    grid-template-columns:minmax(94px, 38%) 1fr;
+    align-items:center;
+    gap:.45rem;
+    padding:.38rem 0;
+    border:0!important;
+    word-break:break-word;
+  }
+  .produtos-list-modern tbody td::before{
+    content:attr(data-label);
+    color:var(--bs-secondary-color);
+    font-size:.8rem;
+    font-weight:600;
+  }
+  .produtos-list-modern td[data-label="Produto"]{
+    display:block;
+    padding-bottom:.65rem;
+    margin-bottom:.35rem;
+    border-bottom:1px solid rgba(0,0,0,.06)!important;
+  }
+  .produtos-list-modern td[data-label="Produto"]::before{
+    display:none;
+  }
+  .produtos-list-modern td[data-label="Preço"],
+  .produtos-list-modern td[data-label="Custo"]{
+    align-items:end;
+  }
+  .produtos-list-modern td[data-label="Preço"] strong{
+    color:var(--bs-primary);
+    font-size:1.05rem;
+  }
+  .produtos-list-modern td[data-label="Ações"]{
+    display:flex;
+    justify-content:flex-end;
+    margin-top:.45rem;
+    padding-top:.65rem;
+    border-top:1px solid rgba(0,0,0,.06)!important;
+  }
+  .produtos-list-modern td[data-label="Ações"]::before{
+    display:none;
+  }
+  .produto-actions .btn{
+    width:38px;
+    height:38px;
+  }
 }
 </style>

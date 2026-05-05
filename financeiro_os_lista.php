@@ -152,18 +152,22 @@ function h($s) {
 ?>
 
 <?php include __DIR__.'/_sidebar.php'; ?>
-<main class="hf-content">
-  <div class="container-fluid py-4">
+<main class="hf-content hf-finance-page">
+  <div class="container-fluid py-4 hf-finance-wrap">
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h4 mb-0">Financeiro</h1>
-        <a href="/os_form.php" class="btn btn-primary btn-sm">
+    <div class="hf-finance-hero d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <div class="hf-page-kicker">Gestão financeira</div>
+            <h1 class="h4 mb-0">Financeiro</h1>
+        </div>
+        <a href="/os_form.php" class="btn btn-primary btn-sm hf-btn-new-os">
+            <i class="bi bi-plus-lg me-1"></i>
             Nova OS
         </a>
     </div>
 
     <!-- Filtros -->
-    <form class="card mb-3 p-3" method="get" action="financeiro_os_lista.php">
+    <form class="card mb-3 p-3 hf-filter-card" method="get" action="financeiro_os_lista.php">
         <div class="row g-2 align-items-end">
             <div class="col-md-2">
                 <label class="form-label">Vencimento de</label>
@@ -193,7 +197,8 @@ function h($s) {
                 <input type="text" name="busca" value="<?=h($busca)?>" class="form-control" placeholder="Nome cliente ou número OS">
             </div>
             <div class="col-md-1 d-grid">
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary hf-btn-filter">
+                    <i class="bi bi-search me-1"></i>
                     Filtrar
                 </button>
             </div>
@@ -304,10 +309,10 @@ function h($s) {
     <!-- ========== LISTA OS ========== -->
 
     <!-- DESKTOP/TABLET: TABELA -->
-    <div class="card shadow-sm d-none d-md-block">
+    <div class="card shadow-sm d-none d-md-block hf-table-card">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
+                <table class="table table-sm align-middle mb-0 hf-finance-table">
                     <thead class="table-light">
                         <tr>
                             <th>#</th>
@@ -350,22 +355,23 @@ function h($s) {
                                 $statusLabel = $statusTit ? ucfirst(str_replace('_',' ',$statusTit)) : '-';
                             ?>
                             <tr>
-                                <td><?= (int)$r['id'] ?></td>
-                                <td><?= (int)$r['os_id'] ?></td>
+                                <td class="text-muted">#<?= (int)$r['id'] ?></td>
+                                <td><span class="hf-os-number"><?= (int)$r['os_id'] ?></span></td>
                                 <td><?= h($r['cliente_nome'] ?: ('#'.$r['cliente_id'])) ?></td>
                                 <td><?= fmtData($r['data_os']) ?></td>
                                 <td><?= fmtData($r['data_vencimento']) ?></td>
                                 <td><?= fmtData($r['data_pagamento']) ?></td>
                                 <td><?= h($r['forma_pagamento']) ?></td>
-                                <td class="text-end"><?= fmtMoeda($r['valor_total']) ?></td>
+                                <td class="text-end fw-semibold"><?= fmtMoeda($r['valor_total']) ?></td>
                                 <td class="text-end"><?= fmtMoeda($r['valor_pago']) ?></td>
                                 <td>
-                                    <span class="badge bg-<?= $badgeClass ?>">
+                                    <span class="badge bg-<?= $badgeClass ?> hf-status-badge">
                                         <?= h($statusLabel) ?>
                                     </span>
                                 </td>
                                 <td class="text-center">
-                                    <a href="/os_form.php?id=<?= (int)$r['os_id'] ?>" class="btn btn-sm btn-outline-primary">
+                                    <a href="/os_form.php?id=<?= (int)$r['os_id'] ?>" class="btn btn-sm btn-outline-primary hf-action-btn">
+                                        <i class="bi bi-eye me-1"></i>
                                         Ver OS
                                     </a>
                                 </td>
@@ -379,9 +385,9 @@ function h($s) {
     </div>
 
     <!-- MOBILE: CARDS -->
-    <div class="d-block d-md-none mt-3">
+    <div class="d-block d-md-none mt-3 hf-mobile-list">
         <?php if (!$rows): ?>
-            <div class="alert alert-light text-center text-muted">
+            <div class="alert alert-light text-center text-muted hf-empty-state">
                 Nenhum título encontrado para os filtros informados.
             </div>
         <?php else: ?>
@@ -417,20 +423,20 @@ function h($s) {
                         $linkOs = '/os_form.php?id='.(int)$r['os_id'];
                     ?>
                     <div class="col-12 mb-3">
-                        <div class="card shadow-sm h-100" style="border-left:4px solid <?= $borderColor ?>;">
-                            <div class="card-body p-2 d-flex flex-column">
+                        <div class="card shadow-sm h-100 hf-mobile-card" style="border-left:4px solid <?= $borderColor ?>;">
+                            <div class="card-body p-3 d-flex flex-column">
 
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <small class="text-muted">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <small class="hf-mobile-os">
                                         OS #<?= (int)$r['os_id'] ?>
                                     </small>
-                                    <span class="badge bg-<?= $badgeClass ?>" style="font-size:.75rem;">
+                                    <span class="badge bg-<?= $badgeClass ?> hf-status-badge">
                                         <?= h($statusLabel) ?>
                                     </span>
                                 </div>
 
                                 <a href="<?= $linkOs ?>" class="text-decoration-none text-body flex-grow-1">
-                                    <div class="fw-semibold mb-1" style="font-size:.95rem;">
+                                    <div class="fw-semibold mb-2 hf-mobile-client">
                                         <?= h($r['cliente_nome'] ?: ('Cliente #'.$r['cliente_id'])) ?>
                                     </div>
 
@@ -444,7 +450,7 @@ function h($s) {
                                         <span><?= h($r['forma_pagamento'] ?: '') ?></span>
                                     </div>
 
-                                    <div class="mt-2 d-flex justify-content-between align-items-center">
+                                    <div class="mt-2 d-flex justify-content-between align-items-center hf-mobile-money-row">
                                         <div class="small text-muted">Valor</div>
                                         <div class="fw-bold">
                                             <?= fmtMoeda($r['valor_total']) ?>
@@ -457,8 +463,8 @@ function h($s) {
                                     </div>
                                 </a>
 
-                                <div class="mt-2 d-flex justify-content-end">
-                                    <a href="<?= $linkOs ?>" class="btn btn-sm btn-outline-primary">
+                                <div class="mt-3 d-flex justify-content-end">
+                                    <a href="<?= $linkOs ?>" class="btn btn-sm btn-outline-primary hf-action-btn">
                                         <i class="bi bi-eye"></i> Detalhes
                                     </a>
                                 </div>
@@ -474,8 +480,85 @@ function h($s) {
   </div>
 </main>
 
-<!-- Estilo dos cards de resumo (padrão painel) -->
+<!-- Estilo visual desta tela -->
 <style>
+.hf-finance-page {
+    min-height: calc(100vh - var(--topbar-h));
+    background:
+        radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .10), transparent 28rem),
+        linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+}
+
+.hf-finance-wrap {
+    max-width: 1480px;
+}
+
+.hf-finance-hero {
+    gap: 1rem;
+    padding: .25rem .1rem .6rem;
+}
+
+.hf-page-kicker {
+    font-size: .74rem;
+    font-weight: 700;
+    color: rgba(var(--bs-primary-rgb), .88);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: .15rem;
+}
+
+.hf-btn-new-os,
+.hf-btn-filter,
+.hf-action-btn {
+    border-radius: .65rem;
+    font-weight: 600;
+    box-shadow: 0 8px 18px rgba(var(--bs-primary-rgb), .16);
+}
+
+.hf-btn-new-os {
+    padding: .48rem .78rem;
+    white-space: nowrap;
+}
+
+.hf-filter-card,
+.hf-table-card,
+.hf-mobile-card,
+.hf-empty-state {
+    border: 1px solid rgba(148, 163, 184, .24);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, .92);
+    box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+}
+
+.hf-filter-card {
+    backdrop-filter: blur(8px);
+}
+
+.hf-filter-card .form-label {
+    margin-bottom: .35rem;
+    font-size: .76rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.hf-filter-card .form-control,
+.hf-filter-card .form-select {
+    min-height: 42px;
+    border-radius: .72rem;
+    border-color: #dbe3ee;
+    background-color: #f8fafc;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75);
+}
+
+.hf-filter-card .form-control:focus,
+.hf-filter-card .form-select:focus {
+    border-color: rgba(var(--bs-primary-rgb), .55);
+    box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
+    background-color: #fff;
+}
+
 .hf-summary-row {
     margin-bottom: 1.5rem;
 }
@@ -483,63 +566,254 @@ function h($s) {
 .hf-summary-card {
     display: flex;
     align-items: center;
-    gap: .75rem;
-    padding: .85rem 1rem;
-    border-radius: .75rem;
-    background: #ffffff;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
-    border: 1px solid rgba(148, 163, 184, 0.25);
+    gap: .85rem;
+    min-height: 112px;
+    padding: 1rem 1.05rem;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, .94);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, .07);
+    border: 1px solid rgba(148, 163, 184, .24);
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+.hf-summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, .10);
+    border-color: rgba(var(--bs-primary-rgb), .22);
 }
 
 .hf-summary-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 999px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.25rem;
-    background: rgba(148, 163, 184, 0.15);
-    color: #64748b;
+    background: rgba(99, 102, 241, .11);
+    color: #4f46e5;
     flex-shrink: 0;
 }
 
 .hf-summary-body {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .hf-summary-label {
-    font-size: .80rem;
+    font-size: .74rem;
     text-transform: uppercase;
     letter-spacing: .06em;
-    color: #6b7280;
-    margin-bottom: .10rem;
+    color: #64748b;
+    margin-bottom: .12rem;
+    font-weight: 700;
 }
 
 .hf-summary-value {
-    font-size: 1.4rem;
-    font-weight: 700;
+    font-size: 1.36rem;
+    font-weight: 800;
     line-height: 1.2;
+    color: #0f172a;
 }
 
 .hf-summary-sub {
     font-size: .78rem;
-    color: #9ca3af;
+    color: #94a3b8;
 }
 
-/* variações de cor */
 .hf-summary-warning .hf-summary-icon {
-    background: rgba(245, 158, 11, 0.12);
-    color: #d97706;
+    background: rgba(245, 158, 11, .14);
+    color: #b45309;
 }
 .hf-summary-danger .hf-summary-icon {
-    background: rgba(248, 113, 113, 0.12);
+    background: rgba(239, 68, 68, .12);
     color: #b91c1c;
 }
 .hf-summary-success .hf-summary-icon {
-    background: rgba(22, 163, 74, 0.12);
-    color: #15803d;
+    background: rgba(16, 185, 129, .13);
+    color: #047857;
+}
+
+.hf-table-card {
+    overflow: hidden;
+}
+
+.hf-finance-table {
+    --bs-table-bg: transparent;
+}
+
+.hf-finance-table thead th {
+    padding: .9rem .85rem;
+    border-bottom: 1px solid rgba(148, 163, 184, .28);
+    background: #f1f5f9;
+    color: #475569;
+    font-size: .74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .055em;
+    white-space: nowrap;
+}
+
+.hf-finance-table tbody td {
+    padding: .85rem;
+    border-color: rgba(226, 232, 240, .82);
+    color: #334155;
+}
+
+.hf-finance-table tbody tr {
+    transition: background-color .14s ease, box-shadow .14s ease;
+}
+
+.hf-finance-table tbody tr:hover {
+    background: rgba(var(--bs-primary-rgb), .045);
+    box-shadow: inset 3px 0 0 rgba(var(--bs-primary-rgb), .56);
+}
+
+.hf-os-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    padding: .18rem .45rem;
+    border-radius: 999px;
+    background: rgba(var(--bs-primary-rgb), .10);
+    color: var(--bs-primary);
+    font-weight: 800;
+}
+
+.hf-status-badge {
+    border-radius: 999px;
+    padding: .42rem .62rem;
+    font-weight: 700;
+    letter-spacing: .01em;
+}
+
+.hf-status-badge.bg-warning {
+    color: #8a4b00 !important;
+    background: #fff3cd !important;
+}
+.hf-status-badge.bg-info {
+    color: #075985 !important;
+    background: #dbeafe !important;
+}
+.hf-status-badge.bg-success {
+    color: #047857 !important;
+    background: #d1fae5 !important;
+}
+.hf-status-badge.bg-dark,
+.hf-status-badge.bg-secondary {
+    color: #475569 !important;
+    background: #e2e8f0 !important;
+}
+
+.hf-action-btn {
+    border-color: rgba(var(--bs-primary-rgb), .34);
+    background: rgba(var(--bs-primary-rgb), .04);
+}
+
+.hf-action-btn:hover {
+    color: #fff;
+    background: var(--bs-primary);
+    border-color: var(--bs-primary);
+}
+
+.hf-mobile-list .row {
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.hf-mobile-card {
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 0;
+    transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.hf-mobile-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, .10) !important;
+}
+
+.hf-mobile-os {
+    color: #64748b;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.hf-mobile-client {
+    color: #0f172a;
+    font-size: 1rem;
+}
+
+.hf-mobile-money-row {
+    padding-top: .65rem;
+    border-top: 1px solid rgba(226, 232, 240, .9);
+}
+
+@media (max-width: 767.98px) {
+    .hf-finance-page {
+        padding-left: .25rem;
+        padding-right: .25rem;
+    }
+
+    .hf-finance-hero {
+        align-items: flex-start !important;
+    }
+
+    .hf-btn-new-os {
+        padding: .44rem .62rem;
+    }
+
+    .hf-filter-card {
+        border-radius: .9rem;
+    }
+
+    .hf-summary-card {
+        min-height: auto;
+    }
+
+    .hf-btn-filter {
+        width: 100%;
+        margin-top: .25rem;
+    }
+}
+
+[data-bs-theme="dark"] .hf-finance-page {
+    background:
+        radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .16), transparent 28rem),
+        linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+[data-bs-theme="dark"] .hf-filter-card,
+[data-bs-theme="dark"] .hf-table-card,
+[data-bs-theme="dark"] .hf-mobile-card,
+[data-bs-theme="dark"] .hf-summary-card,
+[data-bs-theme="dark"] .hf-empty-state {
+    background: rgba(17, 24, 39, .9);
+    border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-summary-value,
+[data-bs-theme="dark"] .hf-mobile-client {
+    color: #e5e7eb;
+}
+
+[data-bs-theme="dark"] .hf-filter-card .form-control,
+[data-bs-theme="dark"] .hf-filter-card .form-select {
+    background-color: rgba(15, 23, 42, .9);
+    border-color: rgba(148, 163, 184, .24);
+}
+
+[data-bs-theme="dark"] .hf-finance-table thead th {
+    background: rgba(30, 41, 59, .95);
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .hf-finance-table tbody td {
+    color: #cbd5e1;
+    border-color: rgba(51, 65, 85, .9);
 }
 </style>
 

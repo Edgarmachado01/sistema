@@ -49,77 +49,126 @@ $st->execute();
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
-<main class="hf-content" style="overflow-x:hidden;">
 
-  <!-- Título + Filtros (compacto, sem quebra) -->
-  <div class="d-flex flex-wrap align-items-center mb-3 gap-2">
-    <h4 class="mb-0 me-auto">Clientes</h4>
+<main class="hf-content clientes-page" style="overflow-x:hidden;">
+  <div class="clientes-hero mb-3">
+    <div>
+      <div class="text-muted small text-uppercase fw-semibold">Clientes</div>
+      <h4 class="mb-1">Cadastro de clientes</h4>
+      <div class="text-muted small">
+        <?= (int)$total ?> cliente<?= $total === 1 ? '' : 's' ?> encontrado<?= $total === 1 ? '' : 's' ?>
+      </div>
+    </div>
 
-    <div id="cliFilters" class="filters-bar d-flex align-items-center gap-2 flex-grow-1 flex-md-grow-0">
-      <form class="filters-form d-flex align-items-center gap-2 flex-grow-1" method="get">
-        <!-- input-group junta input + botão, sem quebrar -->
-        <div class="input-group input-group-sm flex-grow-1">
+    <a href="/cliente_form.php" class="btn btn-primary btn-sm d-none d-md-inline-flex align-items-center gap-1">
+      <i class="bi bi-plus-lg"></i>
+      <span>Novo cliente</span>
+    </a>
+  </div>
+
+  <div class="hf-card clientes-filter-card p-3 mb-3">
+    <form class="row g-2 align-items-end" method="get">
+      <div class="col-12 col-md-7 col-lg-6">
+        <label class="form-label small text-muted mb-1">Buscar</label>
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
           <input type="text"
                  name="q"
                  value="<?= htmlspecialchars($q) ?>"
                  class="form-control"
-                 placeholder="Buscar nome, doc, email, fone...">
-          <button class="btn btn-primary" type="submit" title="Pesquisar">
-            <i class="bi bi-search"></i>
-          </button>
+                 placeholder="Nome, documento, email ou telefone">
         </div>
-      </form>
+      </div>
 
-      <!-- Botão “Novo” compacto no desktop -->
-      <a href="/cliente_form.php"
-         class="btn btn-success btn-sm btn-new d-none d-md-inline-flex">
-        <i class="bi bi-plus-lg me-1"></i><span>Novo</span>
-      </a>
-    </div>
+      <div class="col-6 col-md-auto">
+        <button class="btn btn-primary btn-sm w-100" type="submit">
+          Filtrar
+        </button>
+      </div>
+
+      <?php if ($q !== ''): ?>
+        <div class="col-6 col-md-auto">
+          <a class="btn btn-outline-secondary btn-sm w-100" href="/clientes.php">
+            Limpar
+          </a>
+        </div>
+      <?php endif; ?>
+    </form>
   </div>
 
-  <!-- Lista -->
-  <div class="hf-card p-0 cli-list">
+  <div class="hf-card p-0 clientes-list-modern">
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0" id="cliTable">
-        <thead class="table-light">
+      <table class="table align-middle mb-0" id="cliTable">
+        <thead>
           <tr>
-            <th>Nome</th>
+            <th>Cliente</th>
             <th>Documento</th>
             <th>Email</th>
             <th>Telefone</th>
             <th>Cidade/UF</th>
             <th>Status</th>
-            <th class="text-end" style="width:120px">Ações</th>
+            <th class="text-end" style="width:130px">Ações</th>
           </tr>
         </thead>
         <tbody>
           <?php if (!$rows): ?>
-            <tr><td colspan="7" class="text-center text-muted py-4">Nenhum cliente encontrado.</td></tr>
+            <tr>
+              <td colspan="7" class="text-center text-muted py-5">
+                <div class="mb-2"><i class="bi bi-people fs-3"></i></div>
+                Nenhum cliente encontrado.
+              </td>
+            </tr>
           <?php else: foreach ($rows as $r):
             $fone = $r['telefone'] ?: $r['celular'] ?: '';
             $cidadeUf = trim(($r['cidade'] ?: '').'/'.($r['uf'] ?: ''), '/');
+            $ativo = (int)$r['status'] === 1;
           ?>
             <tr class="cli-row">
-              <td data-label="Nome" class="fw-semibold" style="word-break:break-word;"><?= htmlspecialchars($r['nome']) ?></td>
-              <td data-label="Documento"><?= htmlspecialchars($r['documento'] ?? '') ?></td>
-              <td data-label="Email" style="word-break:break-word;"><?= htmlspecialchars($r['email'] ?? '') ?></td>
-              <td data-label="Telefone"><?= htmlspecialchars($fone) ?></td>
-              <td data-label="Cidade/UF"><?= htmlspecialchars($cidadeUf) ?></td>
-              <td data-label="Status">
-                <?php if ((int)$r['status']===1): ?>
-                  <span class="badge bg-success">Ativo</span>
-                <?php else: ?>
-                  <span class="badge bg-secondary">Inativo</span>
+              <td data-label="Cliente">
+                <div class="cliente-name"><?= htmlspecialchars($r['nome']) ?></div>
+                <?php if (!empty($r['documento'])): ?>
+                  <div class="text-muted small d-md-none"><?= htmlspecialchars($r['documento']) ?></div>
                 <?php endif; ?>
               </td>
+
+              <td data-label="Documento">
+                <?= htmlspecialchars($r['documento'] ?? '') ?>
+              </td>
+
+              <td data-label="Email">
+                <span class="cliente-email"><?= htmlspecialchars($r['email'] ?? '') ?></span>
+              </td>
+
+              <td data-label="Telefone">
+                <?= htmlspecialchars($fone ?: '-') ?>
+              </td>
+
+              <td data-label="Cidade/UF">
+                <?= htmlspecialchars($cidadeUf ?: '-') ?>
+              </td>
+
+              <td data-label="Status">
+                <?php if ($ativo): ?>
+                  <span class="badge rounded-pill text-bg-success">Ativo</span>
+                <?php else: ?>
+                  <span class="badge rounded-pill text-bg-secondary">Inativo</span>
+                <?php endif; ?>
+              </td>
+
               <td data-label="Ações" class="text-end">
-                <div class="d-inline-flex gap-1">
-                  <a class="btn btn-sm btn-outline-primary" href="/cliente_form.php?id=<?= (int)$r['id'] ?>" title="Editar"><i class="bi bi-pencil-square"></i></a>
+                <div class="cliente-actions">
+                  <a class="btn btn-sm btn-primary"
+                     href="/cliente_form.php?id=<?= (int)$r['id'] ?>"
+                     title="Editar">
+                    <i class="bi bi-pencil-square"></i>
+                  </a>
+
                   <form method="post" action="/cliente_delete.php" class="d-inline m-0 p-0" onsubmit="return confirm('Confirma excluir (soft delete)?');">
                     <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                      <i class="bi bi-trash"></i>
+                    </button>
                   </form>
                 </div>
               </td>
@@ -144,7 +193,6 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
   <?php endif; ?>
 </main>
 
-<!-- FAB (mobile) -->
 <a href="/cliente_form.php" class="btn btn-primary rounded-circle shadow fab-new d-md-none" title="Novo cliente">
   <i class="bi bi-plus-lg"></i>
 </a>
@@ -152,90 +200,169 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 <?php require_once __DIR__.'/_layout_end.php'; ?>
 
 <style>
-/* ===== Barra de filtros enxuta ===== */
-.filters-bar{
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: #fff;
-  padding: .5rem .6rem;         /* menos altura */
-  border: 1px solid #e9ecef;
-  border-radius: .5rem;
+.clientes-page{
+  background:
+    radial-gradient(circle at top right, rgba(var(--bs-primary-rgb), .08), transparent 34rem),
+    linear-gradient(180deg, rgba(var(--bs-primary-rgb), .03), transparent 18rem);
 }
-.filters-form .btn{ white-space: nowrap; } /* nunca quebra o botão */
-
-/* Botão “Novo” compacto no desktop */
-.btn-new{
-  align-self: center;
-  padding: .30rem .60rem;
-  border-radius: .5rem;
-  line-height: 1.1;
-  height: 1.8125rem; /* ~29px */
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+.clientes-hero{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:1rem;
+  padding:1rem 1.1rem;
+  border:1px solid rgba(0,0,0,.06);
+  border-radius:18px;
+  background:rgba(255,255,255,.78);
+  box-shadow:0 8px 24px rgba(15,23,42,.06);
 }
-
-/* FAB mobile */
+[data-bs-theme="dark"] .clientes-hero{
+  background:rgba(33,37,41,.72);
+  border-color:rgba(255,255,255,.08);
+}
+.clientes-filter-card{
+  border-radius:16px;
+}
+.clientes-filter-card .input-group-text{
+  background:var(--bs-body-bg);
+}
+.clientes-list-modern{
+  overflow:hidden;
+  border-radius:18px;
+}
+.clientes-list-modern table{
+  --bs-table-hover-bg:rgba(var(--bs-primary-rgb), .045);
+}
+.clientes-list-modern thead th{
+  padding:.85rem .9rem;
+  background:rgba(var(--bs-primary-rgb), .06);
+  color:var(--bs-secondary-color);
+  font-size:.76rem;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  border-bottom:1px solid rgba(0,0,0,.06);
+}
+.clientes-list-modern tbody td{
+  padding:.9rem;
+  border-color:rgba(0,0,0,.055);
+}
+.cli-row{
+  transition:background .15s ease, transform .15s ease;
+}
+.cli-row:hover{
+  transform:translateY(-1px);
+}
+.cliente-name{
+  font-weight:700;
+  color:var(--bs-body-color);
+  word-break:break-word;
+}
+.cliente-email{
+  word-break:break-word;
+}
+.cliente-actions{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:.35rem;
+}
+.cliente-actions .btn{
+  width:32px;
+  height:32px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:10px;
+  padding:0;
+}
 .fab-new{
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  width: 56px; height: 56px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.25rem;
-  z-index: 1050;
+  position:fixed;
+  right:16px;
+  bottom:16px;
+  width:56px;
+  height:56px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:1.25rem;
+  z-index:1050;
 }
-
-/* Desktop mantém tabela */
-@media (min-width: 768px){
-  .cli-list table{ table-layout: fixed; }
+@media (min-width:768px){
+  .clientes-list-modern table{
+    table-layout:fixed;
+  }
 }
-
-/* Mobile: cards sem overflow lateral */
-@media (max-width: 767.98px){
-  .btn-new{ display: none !important; }
-  .cli-list .table-responsive{ overflow-x: visible; }
-
-  .cli-list table,
-  .cli-list thead,
-  .cli-list tbody,
-  .cli-list th,
-  .cli-list td,
-  .cli-list tr{
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
+@media (max-width:767.98px){
+  .clientes-hero{
+    align-items:flex-start;
+    padding:.9rem;
   }
-  .cli-list thead{ display: none; }
-
-  .cli-list tbody tr.cli-row{
-    border: 1px solid #e9ecef;
-    border-radius: .75rem;
-    padding: .75rem;
-    margin: .65rem 0;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  .clientes-list-modern{
+    background:transparent;
+    border:0;
+    box-shadow:none;
   }
-
-  .cli-list td{
-    display: grid;
-    grid-template-columns: minmax(88px, 42%) 1fr;
-    align-items: center;
-    gap: .4rem;
-    padding: .3rem 0;
-    border: 0 !important;
-    word-break: break-word;
+  .clientes-list-modern .table-responsive{
+    overflow-x:visible;
   }
-
-  .cli-list td::before{
-    content: attr(data-label);
-    font-size: .84rem;
-    color: #6c757d;
+  .clientes-list-modern table,
+  .clientes-list-modern thead,
+  .clientes-list-modern tbody,
+  .clientes-list-modern th,
+  .clientes-list-modern td,
+  .clientes-list-modern tr{
+    display:block;
+    width:100%;
+    box-sizing:border-box;
   }
-
-  .cli-list td[data-label="Ações"]{
-    display: flex; justify-content: flex-end; gap: .5rem; margin-top: .25rem;
+  .clientes-list-modern thead{
+    display:none;
   }
-  .cli-list td[data-label="Ações"] .btn{ padding: .45rem .6rem; }
+  .clientes-list-modern tbody tr.cli-row{
+    border:1px solid rgba(0,0,0,.08);
+    border-radius:16px;
+    padding:.85rem;
+    margin:.75rem 0;
+    background:var(--bs-body-bg);
+    box-shadow:0 8px 20px rgba(15,23,42,.07);
+  }
+  .clientes-list-modern tbody td{
+    display:grid;
+    grid-template-columns:minmax(94px, 38%) 1fr;
+    align-items:center;
+    gap:.45rem;
+    padding:.38rem 0;
+    border:0!important;
+    word-break:break-word;
+  }
+  .clientes-list-modern tbody td::before{
+    content:attr(data-label);
+    color:var(--bs-secondary-color);
+    font-size:.8rem;
+    font-weight:600;
+  }
+  .clientes-list-modern td[data-label="Cliente"]{
+    display:block;
+    padding-bottom:.65rem;
+    margin-bottom:.35rem;
+    border-bottom:1px solid rgba(0,0,0,.06)!important;
+  }
+  .clientes-list-modern td[data-label="Cliente"]::before{
+    display:none;
+  }
+  .clientes-list-modern td[data-label="Ações"]{
+    display:flex;
+    justify-content:flex-end;
+    margin-top:.45rem;
+    padding-top:.65rem;
+    border-top:1px solid rgba(0,0,0,.06)!important;
+  }
+  .clientes-list-modern td[data-label="Ações"]::before{
+    display:none;
+  }
+  .cliente-actions .btn{
+    width:38px;
+    height:38px;
+  }
 }
 </style>
