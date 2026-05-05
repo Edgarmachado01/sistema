@@ -247,97 +247,191 @@ include __DIR__.'/_layout_start.php';
 include __DIR__.'/_sidebar.php';
 ?>
 
-<main class="hf-content">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Usuários da Empresa</h4>
-    <a href="usuarios.php?m=usuarios" class="btn btn-sm btn-outline-secondary">Novo usuário</a>
-  </div>
+<main class="hf-content hf-users-page">
+  <div class="container-fluid py-4 hf-users-wrap">
 
-  <?php if ($erro): ?>
-    <div class="alert alert-danger"><?=$erro?></div>
-  <?php elseif ($mensagem): ?>
-    <div class="alert alert-success"><?=$mensagem?></div>
-  <?php endif; ?>
+    <div class="hf-users-hero d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <div class="hf-page-kicker">Administração</div>
+        <h4 class="mb-0">
+          <i class="bi bi-people-fill me-2"></i>Usuários da Empresa
+        </h4>
+        <div class="hf-page-subtitle">Gerencie acessos, papéis e status dos usuários.</div>
+      </div>
 
-  <!-- Formulário -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <form method="post" autocomplete="off">
-        <input type="hidden" name="acao" value="salvar_usuario">
-        <input type="hidden" name="id"
-               value="<?= $editUser ? (int)$editUser['id'] : '' ?>">
+      <a href="usuarios.php?m=usuarios" class="btn btn-sm btn-outline-secondary hf-btn-new-user">
+        <i class="bi bi-plus-lg me-1"></i>Novo usuário
+      </a>
+    </div>
 
-        <div class="row g-3 align-items-end">
-          <div class="col-md-3">
-            <label class="form-label">Nome</label>
-            <input type="text" name="name" class="form-control"
-                   autocomplete="off"
-                   value="<?=$formName?>">
-          </div>
+    <?php if ($erro): ?>
+      <div class="alert alert-danger hf-users-alert">
+        <i class="bi bi-exclamation-triangle me-2"></i><?=$erro?>
+      </div>
+    <?php elseif ($mensagem): ?>
+      <div class="alert alert-success hf-users-alert">
+        <i class="bi bi-check-circle me-2"></i><?=$mensagem?>
+      </div>
+    <?php endif; ?>
 
-          <div class="col-md-3">
-            <label class="form-label">E-mail</label>
-            <input type="email" name="email" class="form-control"
-                   autocomplete="off"
-                   value="<?=$formEmail?>">
-          </div>
+    <!-- Formulário -->
+    <div class="hf-users-card mb-3">
+      <div class="hf-users-card-head">
+        <div class="hf-users-icon">
+          <i class="bi <?= $editUser ? 'bi-pencil-square' : 'bi-person-plus' ?>"></i>
+        </div>
+        <div>
+          <h5><?= $editUser ? 'Editar usuário' : 'Novo usuário' ?></h5>
+          <p><?= $editUser ? 'Atualize os dados, papel, senha e status do usuário.' : 'Cadastre um novo acesso para esta empresa.' ?></p>
+        </div>
+      </div>
 
-          <div class="col-md-2">
-            <label class="form-label">
-              Senha <?= $editUser ? '(deixe em branco p/ manter)' : '' ?>
-            </label>
-            <input type="password" name="password" class="form-control"
-                   autocomplete="new-password">
-          </div>
+      <div class="hf-users-card-body">
+        <form method="post" autocomplete="off">
+          <input type="hidden" name="acao" value="salvar_usuario">
+          <input type="hidden" name="id"
+                 value="<?= $editUser ? (int)$editUser['id'] : '' ?>">
 
-          <div class="col-md-2">
-            <label class="form-label">Papel</label>
-            <select name="role_key" class="form-select">
-              <?php foreach ($roles as $r):
-                  $rk = $r['role_key'];
-              ?>
-                <option value="<?=$rk?>" <?=$rk === $formRoleKey ? 'selected' : ''?>>
-                  <?= htmlspecialchars($r['label_pt'] ?: $rk) ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </div>
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">Nome</label>
+              <div class="hf-input-icon">
+                <i class="bi bi-person"></i>
+                <input type="text" name="name" class="form-control"
+                       autocomplete="off"
+                       value="<?=$formName?>">
+              </div>
+            </div>
 
-          <div class="col-md-1">
-            <div class="form-check mt-4">
-              <input class="form-check-input" type="checkbox" name="is_active" id="is_active"
-                     <?=$formIsActive ? 'checked' : ''?>>
-              <label class="form-check-label" for="is_active">
-                Ativo
+            <div class="col-md-3">
+              <label class="form-label">E-mail</label>
+              <div class="hf-input-icon">
+                <i class="bi bi-envelope"></i>
+                <input type="email" name="email" class="form-control"
+                       autocomplete="off"
+                       value="<?=$formEmail?>">
+              </div>
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label">
+                Senha <?= $editUser ? '(deixe em branco p/ manter)' : '' ?>
               </label>
+              <div class="hf-input-icon">
+                <i class="bi bi-key"></i>
+                <input type="password" name="password" class="form-control"
+                       autocomplete="new-password">
+              </div>
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label">Papel</label>
+              <select name="role_key" class="form-select">
+                <?php foreach ($roles as $r):
+                    $rk = $r['role_key'];
+                ?>
+                  <option value="<?=$rk?>" <?=$rk === $formRoleKey ? 'selected' : ''?>>
+                    <?= htmlspecialchars($r['label_pt'] ?: $rk) ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+
+            <div class="col-md-1">
+              <div class="hf-active-box">
+                <input class="form-check-input" type="checkbox" name="is_active" id="is_active"
+                       <?=$formIsActive ? 'checked' : ''?>>
+                <label class="form-check-label" for="is_active">
+                  Ativo
+                </label>
+              </div>
+            </div>
+
+            <div class="col-md-1">
+              <button class="btn btn-primary w-100 hf-btn-save-user">
+                <i class="bi bi-save d-md-none d-lg-inline me-1"></i>Salvar
+              </button>
             </div>
           </div>
-
-          <div class="col-md-1">
-            <button class="btn btn-primary w-100">Salvar</button>
-          </div>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
-  </div>
 
-  <!-- Lista de usuários -->
-  <div class="card">
-    <div class="card-body">
+    <!-- Lista de usuários -->
+    <div class="hf-users-card">
+      <div class="hf-users-card-head">
+        <div class="hf-users-icon">
+          <i class="bi bi-list-check"></i>
+        </div>
+        <div>
+          <h5>Usuários cadastrados</h5>
+          <p>Lista de acessos vinculados à empresa atual.</p>
+        </div>
+      </div>
 
-      <!-- DESKTOP: tabela -->
-      <div class="table-responsive d-none d-md-block">
-        <table class="table table-sm align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>E-mail</th>
-              <th>Papel</th>
-              <th>Status</th>
-              <th style="width:120px">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div class="hf-users-card-body p-0">
+
+        <!-- DESKTOP: tabela -->
+        <div class="table-responsive d-none d-md-block">
+          <table class="table table-sm align-middle mb-0 hf-users-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>E-mail</th>
+                <th>Papel</th>
+                <th>Status</th>
+                <th style="width:120px">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($usuarios as $u): ?>
+              <?php
+                $rolesUser = array_filter(explode(',', $u['roles'] ?? ''));
+                $labels = [];
+                foreach ($rolesUser as $rk) {
+                    $labels[] = $roleLabels[$rk] ?? $rk;
+                }
+                $roleText = implode(', ', $labels);
+              ?>
+              <tr>
+                <td>
+                  <div class="hf-user-cell">
+                    <div class="hf-user-avatar">
+                      <?= strtoupper(substr((string)$u['name'], 0, 1)) ?>
+                    </div>
+                    <div>
+                      <div class="hf-user-name"><?=htmlspecialchars($u['name'])?></div>
+                      <div class="hf-user-id">ID #<?=(int)$u['id']?></div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span class="hf-user-email"><?=htmlspecialchars($u['email'])?></span>
+                </td>
+                <td>
+                  <span class="hf-role-badge"><?=htmlspecialchars($roleText)?></span>
+                </td>
+                <td>
+                  <?php if (!empty($u['is_active'])): ?>
+                    <span class="badge bg-success hf-status-badge">Ativo</span>
+                  <?php else: ?>
+                    <span class="badge bg-secondary hf-status-badge">Inativo</span>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <a href="usuarios.php?m=usuarios&edit=<?=(int)$u['id']?>"
+                     class="btn btn-sm btn-outline-primary hf-edit-btn">
+                    <i class="bi bi-pencil-square me-1"></i>Editar
+                  </a>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MOBILE: cards -->
+        <div class="d-md-none hf-users-mobile-list">
           <?php foreach ($usuarios as $u): ?>
             <?php
               $rolesUser = array_filter(explode(',', $u['roles'] ?? ''));
@@ -346,63 +440,425 @@ include __DIR__.'/_sidebar.php';
                   $labels[] = $roleLabels[$rk] ?? $rk;
               }
               $roleText = implode(', ', $labels);
+              $ativo = !empty($u['is_active']);
             ?>
-            <tr>
-              <td><?=htmlspecialchars($u['name'])?></td>
-              <td><?=htmlspecialchars($u['email'])?></td>
-              <td><?=htmlspecialchars($roleText)?></td>
-              <td>
-                <?php if (!empty($u['is_active'])): ?>
-                  <span class="badge bg-success">Ativo</span>
+            <div class="hf-user-mobile-card">
+              <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                <div class="hf-user-cell">
+                  <div class="hf-user-avatar">
+                    <?= strtoupper(substr((string)$u['name'], 0, 1)) ?>
+                  </div>
+                  <div>
+                    <div class="hf-user-name"><?=htmlspecialchars($u['name'])?></div>
+                    <div class="hf-user-email"><?=htmlspecialchars($u['email'])?></div>
+                  </div>
+                </div>
+
+                <?php if ($ativo): ?>
+                  <span class="badge bg-success hf-status-badge">Ativo</span>
                 <?php else: ?>
-                  <span class="badge bg-secondary">Inativo</span>
+                  <span class="badge bg-secondary hf-status-badge">Inativo</span>
                 <?php endif; ?>
-              </td>
-              <td>
+              </div>
+
+              <div class="hf-user-mobile-meta">
+                <span>Papel</span>
+                <strong><?=htmlspecialchars($roleText)?></strong>
+              </div>
+
+              <div class="text-end mt-3">
                 <a href="usuarios.php?m=usuarios&edit=<?=(int)$u['id']?>"
-                   class="btn btn-sm btn-outline-primary">Editar</a>
-              </td>
-            </tr>
+                   class="btn btn-sm btn-outline-primary hf-edit-btn">
+                  <i class="bi bi-pencil-square me-1"></i>Editar
+                </a>
+              </div>
+            </div>
           <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
+        </div>
 
-      <!-- MOBILE: cards -->
-      <div class="d-md-none">
-        <?php foreach ($usuarios as $u): ?>
-          <?php
-            $rolesUser = array_filter(explode(',', $u['roles'] ?? ''));
-            $labels = [];
-            foreach ($rolesUser as $rk) {
-                $labels[] = $roleLabels[$rk] ?? $rk;
-            }
-            $roleText = implode(', ', $labels);
-            $ativo = !empty($u['is_active']);
-          ?>
-          <div class="border rounded-3 p-3 mb-2">
-            <div class="fw-semibold mb-1"><?=htmlspecialchars($u['name'])?></div>
-            <div class="small text-muted mb-1"><?=htmlspecialchars($u['email'])?></div>
-            <div class="small mb-1">
-              <strong>Papel:</strong> <?=htmlspecialchars($roleText)?>
-            </div>
-            <div class="mb-2">
-              <?php if ($ativo): ?>
-                <span class="badge bg-success">Ativo</span>
-              <?php else: ?>
-                <span class="badge bg-secondary">Inativo</span>
-              <?php endif; ?>
-            </div>
-            <div class="text-end">
-              <a href="usuarios.php?m=usuarios&edit=<?=(int)$u['id']?>"
-                 class="btn btn-sm btn-outline-primary">Editar</a>
-            </div>
-          </div>
-        <?php endforeach; ?>
       </div>
-
     </div>
+
   </div>
 </main>
+
+<style>
+.hf-users-page {
+  min-height: calc(100vh - var(--topbar-h));
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .10), transparent 28rem),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+}
+
+.hf-users-wrap {
+  max-width: 1480px;
+}
+
+.hf-users-hero {
+  gap: 1rem;
+  padding: .25rem .1rem .55rem;
+}
+
+.hf-page-kicker {
+  font-size: .74rem;
+  font-weight: 800;
+  color: rgba(var(--bs-primary-rgb), .88);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: .12rem;
+}
+
+.hf-page-subtitle {
+  margin-top: .2rem;
+  color: #64748b;
+  font-size: .9rem;
+}
+
+.hf-btn-new-user,
+.hf-btn-save-user,
+.hf-edit-btn {
+  min-height: 38px;
+  border-radius: .72rem;
+  font-weight: 800;
+}
+
+.hf-btn-new-user {
+  white-space: nowrap;
+  background: rgba(255, 255, 255, .8);
+  border-color: rgba(148, 163, 184, .45);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+}
+
+.hf-btn-save-user {
+  box-shadow: 0 8px 18px rgba(var(--bs-primary-rgb), .16);
+}
+
+.hf-users-alert {
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: .9rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+}
+
+.hf-users-card {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+}
+
+.hf-users-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: .85rem;
+  padding: 1.1rem 1.15rem;
+  border-bottom: 1px solid rgba(226, 232, 240, .9);
+  background: linear-gradient(180deg, rgba(248, 250, 252, .95), rgba(255, 255, 255, .95));
+}
+
+.hf-users-card-head h5 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.hf-users-card-head p {
+  margin: .18rem 0 0;
+  color: #64748b;
+  font-size: .86rem;
+}
+
+.hf-users-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: .85rem;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .10);
+  font-size: 1.15rem;
+}
+
+.hf-users-card-body {
+  padding: 1.15rem;
+}
+
+.hf-users-card .form-label {
+  margin-bottom: .35rem;
+  font-size: .76rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.hf-users-card .form-control,
+.hf-users-card .form-select {
+  min-height: 42px;
+  border-radius: .72rem;
+  border-color: #dbe3ee;
+  background-color: #f8fafc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75);
+}
+
+.hf-users-card .form-control:focus,
+.hf-users-card .form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), .55);
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
+  background-color: #fff;
+}
+
+.hf-input-icon {
+  position: relative;
+}
+
+.hf-input-icon > i {
+  position: absolute;
+  left: .85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.hf-input-icon .form-control {
+  padding-left: 2.45rem;
+}
+
+.hf-active-box {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .45rem .65rem;
+  border: 1px solid #dbe3ee;
+  border-radius: .72rem;
+  background: #f8fafc;
+}
+
+.hf-active-box .form-check-input {
+  margin: 0;
+}
+
+.hf-active-box .form-check-label {
+  color: #475569;
+  font-weight: 750;
+}
+
+.hf-users-table {
+  --bs-table-bg: transparent;
+}
+
+.hf-users-table thead th {
+  padding: .95rem .9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, .28);
+  background: #f1f5f9;
+  color: #475569;
+  font-size: .74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+  white-space: nowrap;
+}
+
+.hf-users-table tbody td {
+  padding: .9rem;
+  border-color: rgba(226, 232, 240, .82);
+  color: #334155;
+}
+
+.hf-users-table tbody tr {
+  transition: background-color .14s ease, box-shadow .14s ease;
+}
+
+.hf-users-table tbody tr:hover {
+  background: rgba(var(--bs-primary-rgb), .045);
+  box-shadow: inset 3px 0 0 rgba(var(--bs-primary-rgb), .56);
+}
+
+.hf-user-cell {
+  display: flex;
+  align-items: center;
+  gap: .72rem;
+  min-width: 0;
+}
+
+.hf-user-avatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .11);
+  font-weight: 900;
+}
+
+.hf-user-name {
+  color: #0f172a;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.hf-user-id,
+.hf-user-email {
+  color: #64748b;
+  font-size: .84rem;
+}
+
+.hf-role-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: .28rem .58rem;
+  color: #075985;
+  background: #e0f2fe;
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.hf-status-badge {
+  border-radius: 999px;
+  padding: .42rem .62rem;
+  font-weight: 800;
+}
+
+.hf-status-badge.bg-success {
+  color: #047857 !important;
+  background: #d1fae5 !important;
+}
+
+.hf-status-badge.bg-secondary {
+  color: #475569 !important;
+  background: #e2e8f0 !important;
+}
+
+.hf-edit-btn {
+  border-color: rgba(var(--bs-primary-rgb), .34);
+  background: rgba(var(--bs-primary-rgb), .04);
+}
+
+.hf-edit-btn:hover {
+  color: #fff;
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+.hf-users-mobile-list {
+  padding: .85rem;
+}
+
+.hf-user-mobile-card {
+  padding: .95rem;
+  border: 1px solid rgba(226, 232, 240, .9);
+  border-radius: .95rem;
+  background: rgba(248, 250, 252, .82);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+}
+
+.hf-user-mobile-card + .hf-user-mobile-card {
+  margin-top: .75rem;
+}
+
+.hf-user-mobile-meta {
+  display: grid;
+  gap: .12rem;
+  padding-top: .75rem;
+  border-top: 1px solid rgba(226, 232, 240, .9);
+}
+
+.hf-user-mobile-meta span {
+  color: #64748b;
+  font-size: .74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.hf-user-mobile-meta strong {
+  color: #334155;
+  font-size: .94rem;
+}
+
+@media (max-width: 767.98px) {
+  .hf-users-page {
+    padding-left: .25rem;
+    padding-right: .25rem;
+  }
+
+  .hf-users-hero {
+    align-items: flex-start !important;
+  }
+
+  .hf-users-card-head,
+  .hf-users-card-body {
+    padding: 1rem;
+  }
+
+  .hf-btn-new-user {
+    padding: .44rem .62rem;
+  }
+
+  .hf-btn-save-user {
+    width: 100%;
+  }
+
+  .hf-active-box {
+    justify-content: flex-start;
+  }
+}
+
+[data-bs-theme="dark"] .hf-users-page {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(var(--bs-primary-rgb), .16), transparent 28rem),
+    linear-gradient(180deg, #111827 0%, #0f172a 100%);
+}
+
+[data-bs-theme="dark"] .hf-users-card {
+  background: rgba(17, 24, 39, .9);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-users-card-head {
+  background: linear-gradient(180deg, rgba(30, 41, 59, .95), rgba(17, 24, 39, .95));
+  border-color: rgba(51, 65, 85, .9);
+}
+
+[data-bs-theme="dark"] .hf-users-card-head h5,
+[data-bs-theme="dark"] .hf-user-name {
+  color: #e5e7eb;
+}
+
+[data-bs-theme="dark"] .hf-users-card .form-control,
+[data-bs-theme="dark"] .hf-users-card .form-select,
+[data-bs-theme="dark"] .hf-active-box {
+  background-color: rgba(15, 23, 42, .9);
+  border-color: rgba(148, 163, 184, .24);
+}
+
+[data-bs-theme="dark"] .hf-users-table thead th {
+  background: rgba(30, 41, 59, .95);
+  color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .hf-users-table tbody td,
+[data-bs-theme="dark"] .hf-user-mobile-meta strong {
+  color: #cbd5e1;
+  border-color: rgba(51, 65, 85, .9);
+}
+
+[data-bs-theme="dark"] .hf-user-mobile-card {
+  background: rgba(15, 23, 42, .82);
+  border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-user-mobile-meta {
+  border-color: rgba(51, 65, 85, .9);
+}
+</style>
 
 <?php include __DIR__.'/_layout_end.php'; ?>
