@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__.'/auth.php';
-requireLogin();
-if (!hasRole('SYS_ADMIN') && !hasRole('TENANT_ADMIN')) { http_response_code(403); exit('Sem permissão'); }
+requireAdmin();
 require_once __DIR__.'/db.php';
 
 $msg = $err = '';

@@ -19,26 +19,41 @@ if (file_exists(__DIR__.'/layout_start.php')) {
 $pdo = db();
 $tid = tenantId();
 
-// -------------------------
-// Exclusão simples (?del=ID)
-// -------------------------
-if (isset($_GET['del']) && ctype_digit($_GET['del'])) {
-    $delId = (int) $_GET['del'];
+// Token CSRF para ações POST
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
 
-    $stmtDel = $pdo->prepare("
-        DELETE FROM lancamentos 
-        WHERE id = :id AND tenant_id = :tid
-    ");
-    $stmtDel->execute([
-        ':id'  => $delId,
-        ':tid' => $tid
-    ]);
+// -------------------------
+// Exclusão via POST + CSRF
+// -------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['acao'] ?? '') === 'excluir_lancamento') {
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    $postToken    = $_POST['csrf_token'] ?? '';
+
+    if ($sessionToken !== '' && $postToken !== '' && hash_equals($sessionToken, $postToken)) {
+        $delId = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($delId) {
+            $stmtDel = $pdo->prepare("
+                DELETE FROM lancamentos 
+                WHERE id = :id AND tenant_id = :tid
+            ");
+            $stmtDel->execute([
+                ':id'  => $delId,
+                ':tid' => $tid
+            ]);
+        }
+    }
 }
 
 // -------------------------
 // Filtro tipo_conta (todas / avulsa / recorrente)
 // -------------------------
 $filtro_tipo_conta = isset($_GET['tipo_conta']) ? $_GET['tipo_conta'] : 'todas';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tipo_conta'])) {
+    $filtro_tipo_conta = $_POST['tipo_conta'];
+}
 
 $whereExtra = '';
 $params = [':tid' => $tid];
@@ -243,11 +258,15 @@ function hfSituacaoLancamento(array $l)
                       <?php endif; ?>
                     </td>
                     <td class="text-end">
-                      <a href="/lancamentos.php?m=lanc&tipo_conta=<?= urlencode($filtro_tipo_conta) ?>&del=<?= (int)$l['id'] ?>"
-                         class="btn btn-sm btn-outline-danger"
-                         onclick="return confirm('Excluir este lançamento?');">
-                        <i class="bi bi-trash"></i>
-                      </a>
+                      <form method="post" action="/lancamentos.php?m=lanc" class="d-inline m-0 p-0" onsubmit="return confirm('Excluir este lançamento?');">
+                        <input type="hidden" name="acao" value="excluir_lancamento">
+                        <input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
+                        <input type="hidden" name="tipo_conta" value="<?= htmlspecialchars($filtro_tipo_conta, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </form>
                     </td>
                   </tr>
                 <?php endforeach; ?>
@@ -312,11 +331,15 @@ function hfSituacaoLancamento(array $l)
                     <a href="<?= $urlEdit ?>" class="btn btn-sm btn-outline-primary">
                       <i class="bi bi-pencil"></i>
                     </a>
-                    <a href="/lancamentos.php?m=lanc&tipo_conta=<?= urlencode($filtro_tipo_conta) ?>&del=<?= (int)$l['id'] ?>"
-                       class="btn btn-sm btn-outline-danger"
-                       onclick="return confirm('Excluir este lançamento?');">
-                      <i class="bi bi-trash"></i>
-                    </a>
+                    <form method="post" action="/lancamentos.php?m=lanc" class="d-inline m-0 p-0" onsubmit="return confirm('Excluir este lançamento?');">
+                      <input type="hidden" name="acao" value="excluir_lancamento">
+                      <input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
+                      <input type="hidden" name="tipo_conta" value="<?= htmlspecialchars($filtro_tipo_conta, ENT_QUOTES, 'UTF-8') ?>">
+                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
                   </div>
 
                 </div>

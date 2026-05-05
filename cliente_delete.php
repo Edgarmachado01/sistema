@@ -11,6 +11,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   exit;
 }
 
+// Validação CSRF
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+$postToken    = $_POST['csrf_token'] ?? '';
+if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+  header('Location: /clientes.php');
+  exit;
+}
+
 $id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 if (!$tid || !$id) {
   header('Location: /clientes.php');

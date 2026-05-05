@@ -5,7 +5,16 @@ require_once __DIR__.'/db.php';
 
 $pdo = db();
 $tid = tenantId();
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  header('Location: /servicos.php');
+  exit;
+}
+
+// Validação CSRF
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+$postToken    = $_POST['csrf_token'] ?? '';
+if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
   header('Location: /servicos.php');
   exit;
 }

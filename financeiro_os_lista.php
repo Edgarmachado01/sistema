@@ -8,13 +8,8 @@ error_reporting(E_ALL);
 // === LAYOUT / AUTH / DB ===
 require_once __DIR__.'/_layout_start.php';
 require_once __DIR__.'/db.php';
-$authFile = __DIR__.'/auth.php';
-if (file_exists($authFile)) require_once $authFile;
-
-if (hasRole('ATENDENTE')) {
-    http_response_code(403);
-    exit('Acesso negado.');
-}
+require_once __DIR__.'/auth.php';
+requireAdmin();
 
 $pdo = db();
 $tid = function_exists('tenantId') ? (int)tenantId() : (int)($_SESSION['tenant_id'] ?? 0);

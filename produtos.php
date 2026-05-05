@@ -7,6 +7,12 @@ $pdo = db();
 $tid = tenantId();
 if (!$tid) { die('Tenant inválido.'); }
 
+// Token CSRF para ações de exclusão via POST
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
 $q   = isset($_GET['q']) ? trim($_GET['q']) : '';
 $pg  = max(1, (int)($_GET['pg'] ?? 1));
 $per = 15;
@@ -101,7 +107,11 @@ $rows = $st->fetchAll(PDO::FETCH_ASSOC);
               <td data-label="Ações" class="text-end">
                 <div class="d-inline-flex gap-1">
                   <a class="btn btn-sm btn-outline-primary" href="/produto_form.php?id=<?= (int)$r['id'] ?>" title="Editar"><i class="bi bi-pencil-square"></i></a>
-                  <a class="btn btn-sm btn-outline-danger" href="/produto_delete.php?id=<?= (int)$r['id'] ?>" onclick="return confirm('Confirma excluir (soft delete)?');" title="Excluir"><i class="bi bi-trash"></i></a>
+                  <form method="post" action="/produto_delete.php" class="d-inline m-0 p-0" onsubmit="return confirm('Confirma excluir (soft delete)?');">
+                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+                  </form>
                 </div>
               </td>
             </tr>

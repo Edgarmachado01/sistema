@@ -16,7 +16,6 @@
       <div class="hf-ico"><i class="bi bi-people"></i></div><span>Clientes</span>
     </a>
 
-    <!-- NOVO BLOCO: Cadastros -->
     <div class="section">Cadastros</div>
 
     <a class="nav-link <?= ($_GET['m']??'')==='produtos'?'active':'' ?>" href="/produtos.php?m=produtos" title="Produtos">
@@ -26,24 +25,20 @@
     <a class="nav-link <?= ($_GET['m']??'')==='servicos'?'active':'' ?>" href="/servicos.php?m=servicos" title="Serviços">
       <div class="hf-ico"><i class="bi bi-tools"></i></div><span>Serviços</span>
     </a>
-    <!-- /NOVO BLOCO -->
 
     <div class="section">Gestão</div>
 
-    <!-- Painel financeiro geral (OS + lançamentos) - LIBERADO pra admin e atendente -->
-     <?php if (isAdminLoja()): ?>
+    <?php if (isAdminLoja()): ?>
     <a class="nav-link <?= ($_GET['m']??'')==='fin'?'active':'' ?>" href="/financeiro_os_lista.php?m=fin" title="Financeiro">
       <div class="hf-ico"><i class="bi bi-cash-coin"></i></div><span>Financeiro</span>
     </a>
     <?php endif; ?>
 
-    <!-- Lançamentos avulsos / recorrentes - LIBERADO pra admin e atendente -->
     <a class="nav-link <?= ($_GET['m']??'')==='lanc'?'active':'' ?>"
       href="/lancamentos.php?m=lanc" title="Lançamentos">
       <div class="hf-ico"><i class="bi bi-journal-text"></i></div><span>Lançamentos</span>
     </a>
 
-    <!-- Configurações da empresa - SÓ ADMIN DA LOJA -->
     <?php if (isAdminLoja()): ?>
     <a class="nav-link <?= ($_GET['m'] ?? '') === 'hf' ? 'active' : '' ?> "
       href="/config_empresa.php?m=hf" title="Configurações">
@@ -52,7 +47,7 @@
     </a>
     <?php endif; ?>
 
-     <div class="section">Conta</div>
+    <div class="section">Conta</div>
 
     <a class="nav-link" href="/change_password.php" title="Trocar senha">
       <div class="hf-ico"><i class="bi bi-key"></i></div><span>Trocar senha</span>
@@ -66,8 +61,10 @@
         </div>
         <span>Usuários</span>
       </a>
-    
 
+      <a class="nav-link" href="/admin_reset_password.php" title="Reset de senha">
+        <div class="hf-ico"><i class="bi bi-shield-lock"></i></div><span>Reset de senha</span>
+      </a>
     <?php endif; ?>
   </nav>
 </aside>

@@ -6,12 +6,7 @@ ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 require_once __DIR__.'/auth.php';
-requireLogin();
-if (!isAdminLoja()) {
-    http_response_code(403);
-    header('Location: /dashboard.php');
-    exit('Acesso negado.');
-}
+requireAdmin();
 
 require_once __DIR__.'/db.php';
 

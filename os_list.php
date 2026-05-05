@@ -7,6 +7,12 @@ $pdo = db();
 $tid = tenantId();
 if (!$tid) die('Tenant inválido.');
 
+// Token CSRF para ações de exclusão via POST
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
 $q      = trim($_GET['q'] ?? '');
 $status = trim($_GET['status'] ?? '');
 $pg     = max(1, (int)($_GET['pg'] ?? 1));
@@ -116,11 +122,11 @@ $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success'
               <td data-label="Nº"><span class="fw-semibold">#<?= $num ?></span></td>
               <td data-label="Cliente"><?= htmlspecialchars($r['cliente']) ?></td>
               <td data-label="Status">
-  <span class="badge bg-<?= $badge[$r['status'] ?? 'secondary'] ?>"><?= $label ?></span>
-</td>
-<td data-label="Financeiro">
-  <span class="badge bg-<?= $finClass ?>"><?= $finLabel ?></span>
-</td>
+                <span class="badge bg-<?= $badge[$r['status'] ?? 'secondary'] ?>"><?= $label ?></span>
+              </td>
+              <td data-label="Financeiro">
+                <span class="badge bg-<?= $finClass ?>"><?= $finLabel ?></span>
+              </td>
               <td data-label="Prioridade"><?= htmlspecialchars(ucfirst($r['prioridade'] ?? '')) ?></td>
               <td data-label="Técnico"><?= htmlspecialchars($r['tecnico'] ?? '') ?></td>
               <td data-label="Abertura"><?= $dtAb ?></td>
@@ -143,12 +149,13 @@ $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success'
                   </a>
 
                   <!-- Excluir -->
-                  <a class="btn btn-sm btn-outline-danger"
-                     href="/os_delete.php?id=<?= (int)$r['id'] ?>"
-                     onclick="return confirm('Confirma excluir (soft delete)?');"
-                     title="Excluir">
-                    <i class="bi bi-trash"></i>
-                  </a>
+                  <form method="post" action="/os_delete.php" class="d-inline m-0 p-0" onsubmit="return confirm('Confirma excluir (soft delete)?');">
+                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
                 </div>
               </td>
             </tr>
@@ -244,19 +251,19 @@ $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success'
     border: 1px solid #e9ecef;
     border-radius: .75rem;
     padding: .75rem;
-    margin: .65rem 0;          /* sem margem lateral pra não “estourar” */
+    margin: .65rem 0;
     background: #fff;
     box-shadow: 0 1px 2px rgba(0,0,0,.04);
   }
 
   .os-list td{
     display: grid;
-    grid-template-columns: minmax(88px, 42%) 1fr; /* rótulo adaptável */
+    grid-template-columns: minmax(88px, 42%) 1fr;
     align-items: center;
     gap: .4rem;
     padding: .3rem 0;
     border: 0 !important;
-    word-break: break-word;    /* evita “empurrar” a largura */
+    word-break: break-word;
   }
 
   .os-list td::before{
