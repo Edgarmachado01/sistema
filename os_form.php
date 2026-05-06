@@ -15,6 +15,11 @@ $pdo = db();
 $tid = tenantId();
 if (!$tid) die('Tenant inválido.');
 
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
 $id = (int)($_GET['id'] ?? 0);
 
 // ---------- CLIENTES (com fallback p/ coluna default_garantia_dias) ----------
@@ -139,6 +144,7 @@ if ($os && !empty($os['garantia_ate'])) {
     <!-- IMPORTANTE: enctype para upload -->
     <form class="hf-os-form-shell" method="post" action="/os_save.php" id="osForm" enctype="multipart/form-data">
       <input type="hidden" name="id" value="<?= (int)$id ?>">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
 
       <!-- Cliente -->
       <div class="card mb-3 hf-form-section hf-section-cliente">

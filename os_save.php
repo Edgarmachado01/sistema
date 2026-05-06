@@ -1,31 +1,38 @@
 <?php
 // os_save.php — Salva OS + Itens + Fotos (PDO / multi-tenant) c/ fallbacks p/ userId/tenantId
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 require_once __DIR__ . '/auth.php';
 requireLogin();
 
 require_once __DIR__ . '/db.php';
 
-// garante sessão
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
 
 $pdo = db();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   http_response_code(405);
-  exit('Método inválido.');
+  exit('Metodo invalido.');
+}
+
+// CSRF
+$sessionToken = $_SESSION['csrf_token'] ?? '';
+$postToken    = $_POST['csrf_token'] ?? '';
+
+if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+  error_log('os_save.php csrf invalido user=' . ($_SESSION['USER_ID'] ?? ''));
+  header('Location: /os_list.php');
+  exit;
 }
 
 // ===== FALLBACKS: tenantId() / userId() =====
 $tid = function_exists('tenantId') ? (int)tenantId() : (int)($_SESSION['tenant_id'] ?? 0);
 $uid = (int)($_SESSION['USER_ID'] ?? $_SESSION['user_id'] ?? (function_exists('userId') ? userId() : 0));
 
-if ($tid <= 0) { http_response_code(400); exit('Tenant inválido.'); }
-if ($uid <= 0) { http_response_code(401); exit('Usuário inválido.'); }
+if ($tid <= 0) { http_response_code(400); exit('Tenant invalido.'); }
+if ($uid <= 0) { http_response_code(401); exit('Usuario invalido.'); }
 
 // -------- helpers --------
 function brToFloat($v){
@@ -34,6 +41,44 @@ function brToFloat($v){
   $v = str_replace(['.', ' '], '', $v);
   $v = str_replace(',', '.', $v);
   return (float)$v;
+}
+
+function osSaveMakeImage($path){
+  $info = @getimagesize($path);
+  if (!$info || empty($info['mime'])) return null;
+
+  switch ($info['mime']) {
+    case 'image/jpeg':
+      return function_exists('imagecreatefromjpeg') ? @imagecreatefromjpeg($path) : null;
+    case 'image/png':
+      return function_exists('imagecreatefrompng') ? @imagecreatefrompng($path) : null;
+    case 'image/gif':
+      return function_exists('imagecreatefromgif') ? @imagecreatefromgif($path) : null;
+    default:
+      return null;
+  }
+}
+
+function osSaveJpeg($srcPath, $dstPath, $maxW=1600, $maxH=1600, $q=85){
+  $img = osSaveMakeImage($srcPath);
+  if (!$img) return false;
+
+  $w = imagesx($img);
+  $h = imagesy($img);
+  $ratio = min($maxW / max(1,$w), $maxH / max(1,$h), 1);
+  $nw = (int) floor($w * $ratio);
+  $nh = (int) floor($h * $ratio);
+
+  $canvas = imagecreatetruecolor($nw, $nh);
+  $white = imagecolorallocate($canvas, 255, 255, 255);
+  imagefill($canvas, 0, 0, $white);
+  imagecopyresampled($canvas, $img, 0,0,0,0, $nw,$nh, $w,$h);
+
+  $ok = imagejpeg($canvas, $dstPath, $q);
+  imagedestroy($canvas);
+  imagedestroy($img);
+
+  return $ok;
 }
 
 // -------- coleta POST --------
@@ -56,9 +101,9 @@ $total         = brToFloat($_POST['total'] ?? 0);
 $forma_pagto       = trim((string)($_POST['forma_pagto'] ?? ''));
 $status_financeiro = trim((string)($_POST['status_financeiro'] ?? 'pendente'));
 $valor_pago        = brToFloat($_POST['valor_pago'] ?? 0);
-$data_pagto_raw    = trim((string)($_POST['data_pagto'] ?? '')); // YYYY-MM-DD ou vazio
+$data_pagto_raw    = trim((string)($_POST['data_pagto'] ?? ''));
 
-if ($id < 0) { http_response_code(400); exit('ID inválido.'); }
+if ($id < 0) { http_response_code(400); exit('ID invalido.'); }
 if ($garantia_dias < 0) { $garantia_dias = 0; }
 if ($status === '') { $status = 'aberta'; }
 if ($prioridade === '') { $prioridade = 'baixa'; }
@@ -70,32 +115,27 @@ if ($valor_mao_obra < 0) { $valor_mao_obra = 0; }
 if ($valor_pago < 0) { $valor_pago = 0; }
 
 if ($status_financeiro === '') {
-    $status_financeiro = 'pendente';
+  $status_financeiro = 'pendente';
 }
 
-// normaliza em minúsculo
 $status_financeiro = strtolower($status_financeiro);
 
-// REGRA: se marcar "pago" e não informar valor/data, sistema completa
 if ($status_financeiro === 'pago') {
-    if ($valor_pago <= 0 && $total > 0) {
-        // se não informou valor, considera que pagou o total
-        $valor_pago = $total;
-    }
-    if ($data_pagto_raw === '') {
-        // se não informou data, usa hoje
-        $data_pagto = date('Y-m-d');
-    } else {
-        $data_pagto = $data_pagto_raw;
-    }
+  if ($valor_pago <= 0 && $total > 0) {
+    $valor_pago = $total;
+  }
+  if ($data_pagto_raw === '') {
+    $data_pagto = date('Y-m-d');
+  } else {
+    $data_pagto = $data_pagto_raw;
+  }
 } else {
-    // outros status: data de pagamento pode ser nula
-    $data_pagto = ($data_pagto_raw !== '') ? $data_pagto_raw : null;
+  $data_pagto = ($data_pagto_raw !== '') ? $data_pagto_raw : null;
 }
 
 if ($data_pagto_raw !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_pagto_raw)) {
   http_response_code(400);
-  exit('Data de pagamento inválida.');
+  exit('Data de pagamento invalida.');
 }
 
 // Itens
@@ -110,7 +150,26 @@ if (!is_array($item_desc)) $item_desc = [];
 if (!is_array($item_qtd))  $item_qtd  = [];
 if (!is_array($item_vu))   $item_vu   = [];
 
-if ($cliente_id <= 0) { http_response_code(400); exit('Cliente obrigatório.'); }
+if ($cliente_id <= 0) { http_response_code(400); exit('Cliente obrigatorio.'); }
+
+// Valida OS antes de qualquer UPDATE/DELETE quando for edicao
+if ($id > 0) {
+  $stOs = $pdo->prepare("
+    SELECT id
+    FROM hf_os
+    WHERE id = :id
+      AND tenant_id = :t
+      AND deleted_at IS NULL
+    LIMIT 1
+  ");
+  $stOs->execute([':id' => $id, ':t' => $tid]);
+
+  if (!$stOs->fetch(PDO::FETCH_ASSOC)) {
+    error_log("os_save.php OS invalida para edicao id={$id} tenant={$tid} user={$uid}");
+    header('Location: /os_list.php');
+    exit;
+  }
+}
 
 $pdo->beginTransaction();
 
@@ -141,7 +200,6 @@ try {
     }
 
   } else {
-    // primeiro tenta com created_by; se a coluna não existir, cai no catch e insere sem ela
     try {
       $sql = "INSERT INTO hf_os
                 (tenant_id, cliente_id, status, prioridade, tecnico,
@@ -162,11 +220,11 @@ try {
       ]);
       $id = (int)$pdo->lastInsertId();
     } catch (Throwable $e) {
-      // fallback: sem created_by (apenas quando a coluna não existir)
       $msg = strtolower((string)$e->getMessage());
       if (strpos($msg, 'created_by') === false && strpos($msg, 'unknown column') === false) {
         throw $e;
       }
+
       $sql = "INSERT INTO hf_os
                 (tenant_id, cliente_id, status, prioridade, tecnico,
                  valor_mao_obra, defeito, laudo, desconto, acrescimo, total,
@@ -193,6 +251,8 @@ try {
   }
 
   // ---- itens: limpa e regrava ----
+  // Seguro: para edicao, este ponto so e alcancado apos validar id + tenant + deleted_at.
+  // Para nova OS, o id acabou de ser criado no tenant atual.
   $pdo->prepare("DELETE FROM hf_os_itens WHERE os_id=:id")->execute([':id'=>$id]);
 
   $insItem = $pdo->prepare("
@@ -223,7 +283,6 @@ try {
   //  SINCRONIZAÇÃO COM TABELA os_financeiro
   // ===========================================
   try {
-      // busca datas da OS para usar no financeiro
       $stmtOs = $pdo->prepare("
           SELECT data_abertura, created_at
             FROM hf_os
@@ -241,13 +300,9 @@ try {
           $data_os = date('Y-m-d');
       }
 
-      // por enquanto, vencimento = data_os (se depois tiver campo próprio, troca aqui)
       $data_vencimento = $data_os;
-
-      // status financeiro já foi calculado lá em cima
       $statusFinanceiro = $status_financeiro;
 
-      // verifica se já existe registro de financeiro para esta OS
       $sqlCheck = "
           SELECT id
             FROM os_financeiro
@@ -276,7 +331,6 @@ try {
       ];
 
       if ($fin) {
-          // UPDATE
           $sqlUpd = "
               UPDATE os_financeiro
                  SET cliente_id      = :cliente_id,
@@ -295,7 +349,6 @@ try {
           $stmtUpd = $pdo->prepare($sqlUpd);
           $stmtUpd->execute($dadosFinanceiro);
       } else {
-          // INSERT
           $sqlIns = "
               INSERT INTO os_financeiro (
                   tenant_id,
@@ -325,92 +378,63 @@ try {
           $stmtIns->execute($dadosFinanceiro);
       }
   } catch (Throwable $eFin) {
-      // não quebra o salvamento da OS se der erro no financeiro
       error_log('os_save.php financeiro sync: '.$eFin->getMessage());
   }
-  // ===== FIM FINANCEIRO OS =====
 
   // ---- fotos: upload múltiplo ----
   $baseDir  = __DIR__ . '/uploads/os/' . $tid . '/' . date('Y') . '/' . date('m') . '/' . $id . '/';
   $thumbDir = $baseDir . 'thumbs/';
-  if (!is_dir($thumbDir)) { @mkdir($thumbDir, 0775, true); }
-
-  // helpers GD
-  $mkImg = function($path){
-    $info = @getimagesize($path);
-    if (!$info) return null;
-    switch ($info['mime']) {
-      case 'image/jpeg': return imagecreatefromjpeg($path);
-      case 'image/png':  return imagecreatefrompng($path);
-      case 'image/gif':  return imagecreatefromgif($path);
-      default: return null;
-    }
-  };
-  $saveJpeg = function($srcPath, $dstPath, $maxW=1600, $maxH=1600, $q=85) use ($mkImg){
-    $img = $mkImg($srcPath);
-    if (!$img) return false;
-    $w = imagesx($img); $h = imagesy($img);
-    $ratio = min($maxW / max(1,$w), $maxH / max(1,$h), 1);
-    $nw = (int) floor($w * $ratio);
-    $nh = (int) floor($h * $ratio);
-    $canvas = imagecreatetruecolor($nw, $nh);
-    imagecopyresampled($canvas, $img, 0,0,0,0, $nw,$nh, $w,$h);
-    $ok = imagejpeg($canvas, $dstPath, $q);
-    imagedestroy($canvas); imagedestroy($img);
-    return $ok;
-  };
-  $saveThumb = function($srcPath, $dstPath, $size=320, $q=80) use ($mkImg){
-    $img = $mkImg($srcPath);
-    if (!$img) return false;
-    $w = imagesx($img); $h = imagesy($img);
-    $ratio = min($size / max(1,$w), $size / max(1,$h), 1);
-    $nw = (int) floor($w * $ratio);
-    $nh = (int) floor($h * $ratio);
-    $canvas = imagecreatetruecolor($nw, $nh);
-    imagecopyresampled($canvas, $img, 0,0,0,0, $nw,$nh, $w,$h);
-    $ok = imagejpeg($canvas, $dstPath, $q);
-    imagedestroy($canvas); imagedestroy($img);
-    return $ok;
-  };
+  if (!is_dir($thumbDir)) {
+    @mkdir($thumbDir, 0775, true);
+  }
 
   if (!empty($_FILES['fotos']) && isset($_FILES['fotos']['tmp_name']) && is_array($_FILES['fotos']['tmp_name'])) {
-    $cnt = count($_FILES['fotos']['tmp_name']);
-    if ($cnt > 10) $cnt = 10;
+    if (!function_exists('imagecreatetruecolor') || !function_exists('imagejpeg')) {
+      error_log('os_save.php upload ignorado: biblioteca GD indisponivel.');
+    } else {
+      $cnt = count($_FILES['fotos']['tmp_name']);
+      if ($cnt > 10) $cnt = 10;
 
-    // tenta com tenant_id na tabela de fotos; se não existir, cai no fallback sem tenant_id
-    $insFotoTenant = $pdo->prepare("
-      INSERT INTO hf_os_fotos (tenant_id, os_id, caminho, thumb, original_nome, created_at)
-      VALUES (:t,:os,:c,:th,:n, NOW())
-    ");
-    $insFotoNoTenant = $pdo->prepare("
-      INSERT INTO hf_os_fotos (os_id, caminho, thumb, original_nome, created_at)
-      VALUES (:os,:c,:th,:n, NOW())
-    ");
+      $maxBytes = 2 * 1024 * 1024;
+      $allowedMimes = ['image/jpeg', 'image/png', 'image/gif'];
 
-    for ($i=0; $i<$cnt; $i++){
-      $tmp  = $_FILES['fotos']['tmp_name'][$i] ?? null;
-      $name = $_FILES['fotos']['name'][$i] ?? '';
-      $type = $_FILES['fotos']['type'][$i] ?? '';
-      $size = (int)($_FILES['fotos']['size'][$i] ?? 0);
+      $insFotoTenant = $pdo->prepare("
+        INSERT INTO hf_os_fotos (tenant_id, os_id, caminho, thumb, original_nome, created_at)
+        VALUES (:t,:os,:c,:th,:n, NOW())
+      ");
+      $insFotoNoTenant = $pdo->prepare("
+        INSERT INTO hf_os_fotos (os_id, caminho, thumb, original_nome, created_at)
+        VALUES (:os,:c,:th,:n, NOW())
+      ");
 
-      if (!$tmp || !is_uploaded_file($tmp)) continue;
-      if ($size > 8*1024*1024) continue;
-      if (!preg_match('#^image/(jpeg|png|gif)$#i', $type)) continue;
+      for ($i=0; $i<$cnt; $i++){
+        $tmp   = $_FILES['fotos']['tmp_name'][$i] ?? null;
+        $name  = (string)($_FILES['fotos']['name'][$i] ?? '');
+        $size  = (int)($_FILES['fotos']['size'][$i] ?? 0);
+        $error = (int)($_FILES['fotos']['error'][$i] ?? UPLOAD_ERR_NO_FILE);
 
-      $basename = date('Ymd_His') . '_' . substr(md5($name.microtime(true)),0,8) . '.jpg';
-      $dest  = $baseDir  . $basename;
-      $thumb = $thumbDir . $basename;
+        if ($error !== UPLOAD_ERR_OK || !$tmp || !is_uploaded_file($tmp)) continue;
+        if ($size <= 0 || $size > $maxBytes) continue;
 
-      if (!$saveJpeg($tmp, $dest, 1600, 1600, 85)) continue;
-      $saveThumb($dest, $thumb, 320, 80);
+        $info = @getimagesize($tmp);
+        $mime = $info['mime'] ?? '';
+        if (!$info || !in_array($mime, $allowedMimes, true)) continue;
 
-      $cRel = 'uploads/os/' . $tid . '/' . date('Y') . '/' . date('m') . '/' . $id . '/' . $basename;
-      $tRel = 'uploads/os/' . $tid . '/' . date('Y') . '/' . date('m') . '/' . $id . '/thumbs/' . $basename;
+        $basename = date('Ymd_His') . '_' . substr(md5($name . microtime(true) . random_int(1000, 9999)), 0, 8) . '.jpg';
+        $dest  = $baseDir  . $basename;
+        $thumb = $thumbDir . $basename;
 
-      try {
-        $insFotoTenant->execute([':t'=>$tid, ':os'=>$id, ':c'=>$cRel, ':th'=>$tRel, ':n'=>$name]);
-      } catch (Throwable $e) {
-        $insFotoNoTenant->execute([':os'=>$id, ':c'=>$cRel, ':th'=>$tRel, ':n'=>$name]);
+        if (!osSaveJpeg($tmp, $dest, 1600, 1600, 85)) continue;
+        osSaveJpeg($dest, $thumb, 320, 320, 80);
+
+        $cRel = 'uploads/os/' . $tid . '/' . date('Y') . '/' . date('m') . '/' . $id . '/' . $basename;
+        $tRel = 'uploads/os/' . $tid . '/' . date('Y') . '/' . date('m') . '/' . $id . '/thumbs/' . $basename;
+
+        try {
+          $insFotoTenant->execute([':t'=>$tid, ':os'=>$id, ':c'=>$cRel, ':th'=>$tRel, ':n'=>$name]);
+        } catch (Throwable $e) {
+          $insFotoNoTenant->execute([':os'=>$id, ':c'=>$cRel, ':th'=>$tRel, ':n'=>$name]);
+        }
       }
     }
   }
@@ -423,8 +447,8 @@ try {
   if ($pdo->inTransaction()) {
     $pdo->rollBack();
   }
+
   http_response_code(500);
   error_log('os_save.php fatal: '.$e->getMessage());
-  echo '<pre>Erro ao salvar OS: '.$e->getMessage().'</pre>';
-  exit;
+  exit('Erro ao salvar OS. Tente novamente.');
 }
