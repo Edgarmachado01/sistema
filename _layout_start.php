@@ -20,7 +20,7 @@ $brand = [
   'name'    => 'Help Fácil',
 ];
 
-// 1) Tema / cores vindos de brand.php (switcher, etc.)
+// 1) Tema / cores vindos de brand.php
 if (file_exists(__DIR__.'/brand.php')) {
   require __DIR__.'/brand.php';
   if (function_exists('brandFromRequest')) {
@@ -48,7 +48,6 @@ if ($tid > 0) {
       $brand['name'] = $row['nome_fantasia'];
     }
     if (!empty($row['logo_path'])) {
-      // caminho salvo em config_empresa.php (ex: uploads/logos/logo_tenant_1.png)
       $brand['logo'] = $row['logo_path'];
     }
   }
@@ -58,6 +57,34 @@ if ($tid > 0) {
 $hex = ltrim($brand['primary'],'#');
 if (strlen($hex)!==6) $hex='0d6efd';
 list($r,$g,$b) = sscanf($hex, "%02x%02x%02x");
+
+$userName = trim((string)($_SESSION['USER_NAME'] ?? $_SESSION['NOME'] ?? $_SESSION['nome'] ?? ''));
+$userEmail = trim((string)($_SESSION['USER_EMAIL'] ?? $_SESSION['EMAIL'] ?? $_SESSION['email'] ?? ''));
+
+if ($userName === '' && $userEmail !== '') {
+  $userName = trim(strstr($userEmail, '@', true) ?: $userEmail);
+}
+if ($userName === '') {
+  $userName = 'Usuário logado';
+}
+
+$userInitial = strtoupper(substr($userName, 0, 1));
+if ($userInitial === '') {
+  $userInitial = 'U';
+}
+
+$userRole = 'Usuário';
+if (function_exists('isAdminLoja') && isAdminLoja()) {
+  $userRole = 'Administrador';
+} elseif (function_exists('isFinanceiro') && isFinanceiro()) {
+  $userRole = 'Financeiro';
+} elseif (function_exists('isTecnico') && isTecnico()) {
+  $userRole = 'Técnico';
+} elseif (function_exists('isAtendente') && isAtendente()) {
+  $userRole = 'Atendente';
+} elseif (function_exists('isVisualizador') && isVisualizador()) {
+  $userRole = 'Visualizador';
+}
 ?>
 <!doctype html>
 <html lang="pt-br" data-bs-theme="<?= $brand['mode']==='dark'?'dark':'light' ?>">
@@ -76,48 +103,417 @@ list($r,$g,$b) = sscanf($hex, "%02x%02x%02x");
 <body>
 
 <style>
-:root{ --topbar-h:56px }
-.hf-topbar{ background:#0d6efd; }
-.hf-sidebar{ width:240px; min-height:100vh; background:var(--bs-body-bg); border-right:1px solid rgba(0,0,0,.06) }
-.hf-content{ flex:1; min-width:0; padding:1.25rem 1.5rem 2rem }
+:root{ --topbar-h:64px }
+
+.hf-app-topbar{
+  position:sticky;
+  top:0;
+  z-index:1020;
+  min-height:var(--topbar-h);
+  padding:0;
+  background:linear-gradient(180deg, rgba(var(--bs-primary-rgb), .98) 0%, rgba(var(--bs-primary-rgb), .90) 100%) !important;
+  border-bottom:1px solid rgba(255,255,255,.16);
+  box-shadow:0 8px 24px rgba(15,23,42,.14);
+  backdrop-filter:saturate(140%) blur(8px);
+}
+
+.hf-topbar-inner{
+  min-height:var(--topbar-h);
+  display:flex;
+  align-items:center;
+  gap:.85rem;
+  padding-top:.45rem;
+  padding-bottom:.45rem;
+}
+
+.hf-menu-trigger{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  display:inline-grid;
+  place-items:center;
+  padding:0;
+  border:1px solid rgba(255,255,255,.28);
+  border-radius:.85rem;
+  color:#0f172a;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 6px 16px rgba(15,23,42,.12);
+}
+
+.hf-menu-trigger i{
+  font-size:1.35rem;
+  line-height:1;
+}
+
+.hf-menu-trigger:hover{
+  background:#fff;
+  transform:translateY(-1px);
+}
+
+.hf-menu-trigger:active{
+  transform:scale(.98);
+}
+
+.hf-brand-link{
+  min-width:0;
+  max-width:min(56vw, 520px);
+  display:flex;
+  align-items:center;
+  gap:.8rem;
+  padding:0;
+  margin:0;
+  color:#fff;
+  text-decoration:none;
+}
+
+.hf-brand-link:hover{
+  color:#fff;
+}
+
+.hf-brand-logo-wrap{
+  width:46px;
+  height:46px;
+  flex:0 0 46px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border-radius:.9rem;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 8px 18px rgba(15,23,42,.14);
+}
+
+.hf-brand-logo{
+  max-width:38px;
+  max-height:36px;
+  object-fit:contain;
+}
+
+.hf-brand-mark{
+  color:var(--bs-primary);
+  font-size:1.25rem;
+}
+
+.hf-brand-text{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  line-height:1.08;
+}
+
+.hf-brand-name{
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:1.05rem;
+  font-weight:850;
+  letter-spacing:0;
+}
+
+.hf-brand-subtitle{
+  margin-top:.2rem;
+  color:rgba(255,255,255,.74);
+  font-size:.72rem;
+  font-weight:650;
+}
+
+.hf-top-actions{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  min-width:0;
+  flex:0 0 auto;
+}
+
+.hf-user-menu{
+  min-width:0;
+}
+
+.hf-user-toggle{
+  min-height:42px;
+  max-width:280px;
+  display:flex;
+  align-items:center;
+  gap:.58rem;
+  padding:.3rem .75rem .3rem .34rem;
+  border:1px solid rgba(255,255,255,.28);
+  border-radius:999px;
+  color:#fff;
+  background:rgba(255,255,255,.14);
+  box-shadow:none;
+}
+
+.hf-user-toggle:hover,
+.hf-user-toggle:focus{
+  color:#fff;
+  background:rgba(255,255,255,.20);
+  border-color:rgba(255,255,255,.36);
+}
+
+.hf-user-toggle::after{
+  margin-left:.1rem;
+  opacity:.82;
+}
+
+.hf-user-avatar{
+  width:32px;
+  height:32px;
+  flex:0 0 32px;
+  display:grid;
+  place-items:center;
+  border-radius:999px;
+  color:var(--bs-primary);
+  background:#fff;
+  font-size:.8rem;
+  font-weight:900;
+}
+
+.hf-user-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  line-height:1.05;
+}
+
+.hf-user-name{
+  max-width:170px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.82rem;
+  font-weight:800;
+}
+
+.hf-user-role{
+  margin-top:.15rem;
+  color:rgba(255,255,255,.72);
+  font-size:.68rem;
+  font-weight:700;
+}
+
+.hf-user-dropdown{
+  min-width:220px;
+  border:1px solid rgba(148,163,184,.24);
+  border-radius:.9rem;
+  box-shadow:0 18px 44px rgba(15,23,42,.16);
+  overflow:hidden;
+}
+
+.hf-user-dropdown .dropdown-header{
+  padding:.8rem .9rem .55rem;
+}
+
+.hf-user-dropdown .dropdown-item{
+  display:flex;
+  align-items:center;
+  gap:.55rem;
+  padding:.55rem .9rem;
+  font-weight:650;
+}
+
+.hf-logout-btn{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  display:inline-grid;
+  place-items:center;
+  padding:0;
+  border:0;
+  border-radius:.85rem;
+  color:#0f172a;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 6px 16px rgba(15,23,42,.12);
+}
+
+.hf-logout-btn:hover{
+  background:#fff;
+  color:#dc3545;
+  transform:translateY(-1px);
+}
+
+.hf-layout-shell{
+  min-height:calc(100vh - var(--topbar-h));
+  align-items:stretch;
+}
+
+.hf-sidebar{
+  width:240px;
+  min-height:calc(100vh - var(--topbar-h));
+  background:var(--bs-body-bg);
+  border-right:1px solid rgba(0,0,0,.06)
+}
+
+.hf-content{
+  flex:1;
+  min-width:0;
+  padding:1.5rem 1.5rem 2rem;
+}
 
 @media (max-width: 991.98px){
+  .hf-topbar-inner{
+    gap:.6rem;
+  }
+
+  .hf-brand-link{
+    max-width:calc(100vw - 180px);
+    gap:.62rem;
+  }
+
+  .hf-brand-logo-wrap{
+    width:40px;
+    height:40px;
+    flex-basis:40px;
+  }
+
+  .hf-brand-logo{
+    max-width:34px;
+    max-height:31px;
+  }
+
+  .hf-brand-name{
+    font-size:.95rem;
+  }
+
+  .hf-brand-subtitle,
+  .hf-user-copy{
+    display:none;
+  }
+
+  .hf-user-toggle{
+    width:42px;
+    height:42px;
+    justify-content:center;
+    padding:.25rem;
+  }
+
+  .hf-user-toggle::after{
+    display:none;
+  }
+
   .hf-sidebar{
-    position:fixed; top:var(--topbar-h); left:-260px;
-    height:calc(100vh - var(--topbar-h)); width:240px; z-index:1045;
-    background:var(--bs-body-bg); box-shadow:0 16px 40px rgba(0,0,0,.25); transition:left .2s ease;
+    position:fixed;
+    top:var(--topbar-h);
+    left:-260px;
+    height:calc(100vh - var(--topbar-h));
+    width:240px;
+    z-index:1045;
+    background:var(--bs-body-bg);
+    box-shadow:0 16px 40px rgba(0,0,0,.25);
+    transition:left .2s ease;
     border-right:none;
   }
+
   body.sidebar-open .hf-sidebar{ left:0 }
+
   .hf-backdrop{ display:none }
+
   body.sidebar-open .hf-backdrop{
-    display:block; position:fixed; inset:var(--topbar-h) 0 0 0; z-index:1040;
-    background:rgba(0,0,0,.35); backdrop-filter:blur(1px)
+    display:block;
+    position:fixed;
+    inset:var(--topbar-h) 0 0 0;
+    z-index:1040;
+    background:rgba(0,0,0,.35);
+    backdrop-filter:blur(1px)
   }
+
   body.sidebar-open{ overflow:hidden }
+
+  .hf-content{
+    padding:1rem 1rem 1.5rem;
+  }
+}
+
+@media (max-width: 575.98px){
+  :root{ --topbar-h:60px }
+
+  .hf-topbar-inner{
+    padding-left:.75rem;
+    padding-right:.75rem;
+  }
+
+  .hf-menu-trigger{
+    width:40px;
+    height:40px;
+    flex-basis:40px;
+  }
+
+  .hf-brand-link{
+    max-width:calc(100vw - 148px);
+  }
+
+  .hf-brand-logo-wrap{
+    width:38px;
+    height:38px;
+    flex-basis:38px;
+  }
+
+  .hf-brand-name{
+    font-size:.88rem;
+  }
+
+  .hf-logout-btn{
+    display:none;
+  }
 }
 </style>
 
-<nav class="navbar navbar-expand-lg hf-topbar">
-  <div class="container-fluid">
+<nav class="navbar hf-topbar hf-app-topbar">
+  <div class="container-fluid hf-topbar-inner">
 
-    <button id="hf-menu-btn" class="btn btn-light btn-hamb me-2" type="button" aria-controls="hf-sidebar" aria-expanded="false" aria-label="Abrir menu">
+    <button id="hf-menu-btn" class="btn hf-menu-trigger" type="button" aria-controls="hf-sidebar" aria-expanded="false" aria-label="Abrir menu">
       <i class="bi bi-list"></i>
     </button>
 
-    <a class="navbar-brand text-white fw-semibold d-flex align-items-center gap-2" href="/dashboard.php">
-      <?php if(!empty($brand['logo'])): ?>
-        <!-- aqui você controla o tamanho visual do logo -->
-        <img src="<?= htmlspecialchars($brand['logo']) ?>" style="height:28px; width:auto; object-fit:contain;" alt="Logo">
-      <?php endif; ?>
-      <!-- <span><?= htmlspecialchars($brand['name']) ?></span> -->
+    <a class="navbar-brand hf-brand-link" href="/dashboard.php" title="<?= htmlspecialchars($brand['name']) ?>">
+      <span class="hf-brand-logo-wrap">
+        <?php if(!empty($brand['logo'])): ?>
+          <img src="<?= htmlspecialchars($brand['logo']) ?>" class="hf-brand-logo" alt="Logo">
+        <?php else: ?>
+          <i class="bi bi-tools hf-brand-mark"></i>
+        <?php endif; ?>
+      </span>
+      <span class="hf-brand-text">
+        <span class="hf-brand-name"><?= htmlspecialchars($brand['name']) ?></span>
+        <span class="hf-brand-subtitle">Painel de gestão</span>
+      </span>
     </a>
 
-    <div class="ms-auto d-flex align-items-center gap-2">
-      <button class="btn btn-light btn-sm" onclick="hfToggleSwitcher()" title="Tema e cores">
-        <i class="bi bi-gear"></i>
-      </button>
-      <a class="btn btn-light btn-sm" href="/logout.php" title="Sair">
+    <div class="ms-auto hf-top-actions">
+      <div class="dropdown hf-user-menu">
+        <button class="btn hf-user-toggle dropdown-toggle" type="button" id="hf-user-menu" data-bs-toggle="dropdown" aria-expanded="false" title="<?= htmlspecialchars($userName) ?>">
+          <span class="hf-user-avatar"><?= htmlspecialchars($userInitial) ?></span>
+          <span class="hf-user-copy">
+            <span class="hf-user-name"><?= htmlspecialchars($userName) ?></span>
+            <span class="hf-user-role"><?= htmlspecialchars($userRole) ?></span>
+          </span>
+        </button>
+
+        <ul class="dropdown-menu dropdown-menu-end hf-user-dropdown" aria-labelledby="hf-user-menu">
+          <li>
+            <div class="dropdown-header">
+              <div class="fw-bold text-body"><?= htmlspecialchars($userName) ?></div>
+              <div class="small text-muted"><?= htmlspecialchars($userRole) ?></div>
+            </div>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item" href="/change_password.php">
+              <i class="bi bi-key"></i>
+              <span>Trocar senha</span>
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item text-danger" href="/logout.php">
+              <i class="bi bi-box-arrow-right"></i>
+              <span>Sair</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="btn hf-logout-btn" href="/logout.php" title="Sair" aria-label="Sair">
         <i class="bi bi-box-arrow-right"></i>
       </a>
     </div>
@@ -127,21 +523,4 @@ list($r,$g,$b) = sscanf($hex, "%02x%02x%02x");
 <div id="hf-backdrop" class="hf-backdrop"
      onclick="document.body.classList.remove('sidebar-open')"></div>
 
-<div id="hf-switcher" class="hf-switcher">
-  <h6 class="mb-2">Tema & cores</h6>
-  <?php foreach ([
-    'primary'=>'#0d6efd','success'=>'#198754','warning'=>'#ffc107',
-    'danger'=>'#dc3545','pink'=>'#d63384','purple'=>'#6f42c1',
-    'inverse'=>'#111827','dark'=>'#212529'
-  ] as $key=>$hexColor): ?>
-  <div class="form-check mb-1">
-    <span class="hf-swatch" style="background:<?= $hexColor ?>"></span>
-    <input class="form-check-input" type="radio" name="hf-theme" value="<?= $key ?>" onclick="hfSetTheme(this.value)">
-    <?= ucfirst($key) ?>
-  </div>
-  <?php endforeach; ?>
-  <button class="btn btn-outline-secondary btn-sm w-100"
-          onclick="document.getElementById('hf-switcher').classList.remove('show')">Fechar</button>
-</div>
-
-<div class="d-flex">
+<div class="d-flex hf-layout-shell">
