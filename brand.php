@@ -8,16 +8,18 @@ function brandFromRequest(){
     if ($host) {
       $s = db()->prepare("SELECT * FROM tenants WHERE domain=? AND is_active=1 LIMIT 1");
       $s->execute([$host]);
-      if ($t = $s->fetch()) return normalizeBrand($t);
+      if ($t = $s->fetch()) return mergeTenantConfigBrand(normalizeBrand($t));
     }
     // fallback por ?empresa=slug
     $slug = isset($_GET['empresa']) ? trim($_GET['empresa']) : '';
     if ($slug!=='') {
       $s = db()->prepare("SELECT * FROM tenants WHERE slug=? AND is_active=1 LIMIT 1");
       $s->execute([$slug]);
-      if ($t = $s->fetch()) return normalizeBrand($t);
+      if ($t = $s->fetch()) return mergeTenantConfigBrand(normalizeBrand($t));
     }
-  } catch(Exception $e) { /* silencioso */ }
+  } catch(Exception $e) {
+    error_log('brand.php brandFromRequest: '.$e->getMessage());
+  }
   // padrão
   return [
     'id'=>null,'slug'=>null,'name'=>'Help Fácil',
@@ -34,6 +36,41 @@ function normalizeBrand($t){
     'logo' => $t['brand_logo_url'] ?: null,
     'mode' => ($t['brand_mode']==='dark'?'dark':'light'),
   ];
+}
+
+function mergeTenantConfigBrand($brand){
+  $tenantId = (int)($brand['id'] ?? 0);
+  if ($tenantId <= 0) {
+    return $brand;
+  }
+
+  try {
+    $s = db()->prepare("
+      SELECT nome_fantasia, logo_path, cor_primaria
+      FROM tenant_config
+      WHERE tenant_id = ?
+      LIMIT 1
+    ");
+    $s->execute([$tenantId]);
+    $cfg = $s->fetch();
+    if (!$cfg) {
+      return $brand;
+    }
+
+    if (!empty($cfg['nome_fantasia'])) {
+      $brand['name'] = $cfg['nome_fantasia'];
+    }
+    if (!empty($cfg['logo_path'])) {
+      $brand['logo'] = $cfg['logo_path'];
+    }
+    if (!empty($cfg['cor_primaria'])) {
+      $brand['primary'] = $cfg['cor_primaria'];
+    }
+  } catch(Exception $e) {
+    error_log('brand.php tenant_config: '.$e->getMessage());
+  }
+
+  return $brand;
 }
 
 function echoBrandStyle($brand){

@@ -246,21 +246,21 @@ $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success'
 .hf-os-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: .55rem;
-}
-
-.hf-os-filter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .45rem;
   padding: .55rem;
   border: 1px solid rgba(148, 163, 184, .24);
   border-radius: 1rem;
   background: rgba(255, 255, 255, .92);
   box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
   backdrop-filter: blur(8px);
+}
+
+.hf-os-filter {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
 }
 
 .hf-os-filter .form-control,
@@ -296,6 +296,9 @@ $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success'
   padding-left: 2rem;
 }
 
+.hf-os-filter .form-select {
+  width: 170px;
+}
 .hf-btn-filter,
 .hf-btn-new-os {
   min-height: 34px;
@@ -308,6 +311,7 @@ $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success'
   align-items: center;
   padding-left: .78rem;
   padding-right: .78rem;
+  white-space: nowrap;
 }
 
 .fab-new-os {
@@ -524,6 +528,7 @@ $badge = ['aberta'=>'secondary','em_andamento'=>'warning','concluida'=>'success'
 
   .hf-os-filter {
     width: 100%;
+    flex-wrap: wrap;
   }
 }
 

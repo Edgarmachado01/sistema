@@ -14,18 +14,59 @@ $tid = function_exists('tenantId')
 
 // BRAND por tenant – defaults
 $brand = [
+  'id'      => null,
+  'slug'    => null,
   'primary' => '#0d6efd',
   'mode'    => 'light',
   'logo'    => null,
   'name'    => 'Help Fácil',
 ];
 
+if (!function_exists('hfValidHexColor')) {
+  function hfValidHexColor($value) {
+    return is_string($value) && preg_match('/^#[0-9A-Fa-f]{6}$/', trim($value));
+  }
+}
+
+$tenantBrandPrimary = null;
+$tenantConfigPrimary = null;
+
 // 1) Tema / cores vindos de brand.php
 if (file_exists(__DIR__.'/brand.php')) {
-  require __DIR__.'/brand.php';
-  if (function_exists('brandFromRequest')) {
+  require_once __DIR__.'/brand.php';
+
+  if ($tid > 0 && function_exists('normalizeBrand')) {
+    try {
+      $stmtBrand = $pdo->prepare("SELECT * FROM tenants WHERE id = :tid LIMIT 1");
+      $stmtBrand->execute([':tid' => $tid]);
+      if ($tenantBrand = $stmtBrand->fetch(PDO::FETCH_ASSOC)) {
+        if (hfValidHexColor($tenantBrand['brand_primary'] ?? null)) {
+          $tenantBrandPrimary = trim($tenantBrand['brand_primary']);
+        }
+
+        $b = normalizeBrand($tenantBrand);
+        if (function_exists('mergeTenantConfigBrand')) {
+          $b = mergeTenantConfigBrand($b);
+        }
+        if (is_array($b)) {
+          $brand['id']      = $b['id']      ?? $brand['id'];
+          $brand['slug']    = $b['slug']    ?? $brand['slug'];
+          $brand['primary'] = $b['primary'] ?? $brand['primary'];
+          $brand['mode']    = $b['mode']    ?? $brand['mode'];
+          $brand['logo']    = $b['logo']    ?? $brand['logo'];
+          $brand['name']    = $b['name']    ?? $brand['name'];
+        }
+      }
+    } catch (Exception $e) {
+      error_log('_layout_start.php brand tenant: '.$e->getMessage());
+    }
+  }
+
+  if (empty($brand['id']) && function_exists('brandFromRequest')) {
     $b = brandFromRequest();
     if (is_array($b)) {
+      $brand['id']      = $b['id']      ?? $brand['id'];
+      $brand['slug']    = $b['slug']    ?? $brand['slug'];
       $brand['primary'] = $b['primary'] ?? $brand['primary'];
       $brand['mode']    = $b['mode']    ?? $brand['mode'];
       $brand['logo']    = $b['logo']    ?? $brand['logo'];
@@ -34,28 +75,45 @@ if (file_exists(__DIR__.'/brand.php')) {
   }
 }
 
-// 2) Logo + nome fantasia vindos da tabela tenant_config
+// 2) Fallback direto da tenant_config para instalações sem helpers novos em brand.php
 if ($tid > 0) {
-  $stmt = $pdo->prepare("
-      SELECT nome_fantasia, logo_path
+  try {
+    $stmt = $pdo->prepare("
+      SELECT nome_fantasia, logo_path, cor_primaria
       FROM tenant_config
       WHERE tenant_id = :tid
       LIMIT 1
-  ");
-  $stmt->execute([':tid' => $tid]);
-  if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    if (!empty($row['nome_fantasia'])) {
-      $brand['name'] = $row['nome_fantasia'];
+    ");
+    $stmt->execute([':tid' => $tid]);
+    if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+      if (!empty($row['nome_fantasia'])) {
+        $brand['name'] = $row['nome_fantasia'];
+      }
+      if (!empty($row['logo_path'])) {
+        $brand['logo'] = $row['logo_path'];
+      }
+      if (hfValidHexColor($row['cor_primaria'] ?? null)) {
+        $tenantConfigPrimary = trim($row['cor_primaria']);
+        $brand['primary'] = $tenantConfigPrimary;
+      }
     }
-    if (!empty($row['logo_path'])) {
-      $brand['logo'] = $row['logo_path'];
-    }
+  } catch (Exception $e) {
+    error_log('_layout_start.php tenant_config brand: '.$e->getMessage());
   }
 }
 
-// 3) Converte cor primária pra RGB (Bootstrap)
-$hex = ltrim($brand['primary'],'#');
-if (strlen($hex)!==6) $hex='0d6efd';
+// 3) Garante cor primária válida e converte pra RGB (Bootstrap)
+if (hfValidHexColor($tenantConfigPrimary)) {
+  $brand['primary'] = $tenantConfigPrimary;
+} elseif (hfValidHexColor($tenantBrandPrimary)) {
+  $brand['primary'] = $tenantBrandPrimary;
+} else {
+  $brand['primary'] = '#0d6efd';
+}
+?>
+<!-- BRAND DEBUG: primary=<?= htmlspecialchars((string)($brand['primary'] ?? ''), ENT_QUOTES, 'UTF-8') ?>, logo=<?= htmlspecialchars((string)($brand['logo'] ?? ''), ENT_QUOTES, 'UTF-8') ?>, name=<?= htmlspecialchars((string)($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>, tenant=<?= htmlspecialchars((string)$tid, ENT_QUOTES, 'UTF-8') ?> -->
+<?php
+$hex = ltrim($brand['primary'], '#');
 list($r,$g,$b) = sscanf($hex, "%02x%02x%02x");
 
 $userName = trim((string)($_SESSION['USER_NAME'] ?? $_SESSION['NOME'] ?? $_SESSION['nome'] ?? ''));
@@ -96,7 +154,7 @@ if (function_exists('isAdminLoja') && isAdminLoja()) {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
-  <style>:root{ --bs-primary:#<?= $hex ?>; --bs-primary-rgb:<?= "$r,$g,$b" ?>; }</style>
+  <style>:root{ --bs-primary:#<?= $hex ?>; --bs-primary-rgb:<?= "$r,$g,$b" ?>; --brand:#<?= $hex ?>; --brand-rgb:<?= "$r,$g,$b" ?>; }</style>
 
   <link rel="stylesheet" href="assets/theme.css?v=7">
 </head>
@@ -178,8 +236,9 @@ if (function_exists('isAdminLoja') && isAdminLoja()) {
   place-items:center;
   overflow:hidden;
   border-radius:.9rem;
-  background:rgba(255,255,255,.96);
-  box-shadow:0 8px 18px rgba(15,23,42,.14);
+  background:transparent;
+  border:0;
+  box-shadow:none;
 }
 
 .hf-brand-logo{
@@ -467,13 +526,6 @@ if (function_exists('isAdminLoja') && isAdminLoja()) {
     </button>
 
     <a class="navbar-brand hf-brand-link" href="/dashboard.php" title="<?= htmlspecialchars($brand['name']) ?>">
-      <span class="hf-brand-logo-wrap">
-        <?php if(!empty($brand['logo'])): ?>
-          <img src="<?= htmlspecialchars($brand['logo']) ?>" class="hf-brand-logo" alt="Logo">
-        <?php else: ?>
-          <i class="bi bi-tools hf-brand-mark"></i>
-        <?php endif; ?>
-      </span>
       <span class="hf-brand-text">
         <span class="hf-brand-name"><?= htmlspecialchars($brand['name']) ?></span>
         <span class="hf-brand-subtitle">Painel de gestão</span>

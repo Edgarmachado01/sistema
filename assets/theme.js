@@ -33,8 +33,5 @@
   window.hfSetTheme = (v) => applyTheme(v);
 
   // Não força nenhum tema — só aplica se houver salvo
-  try{
-    const saved = localStorage.getItem(KEY);
-    if (saved) applyTheme(saved);
-  }catch(e){}
+
 })();

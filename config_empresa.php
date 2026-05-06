@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'cidade'         => $_POST['cidade']         ?? '',
         'uf'             => $_POST['uf']             ?? '',
         'cor_primaria'   => $_POST['cor_primaria']   ?? '#0d6efd',
-        'cor_secundaria' => $_POST['cor_secundaria'] ?? '#6c757d',
+        'cor_secundaria' => $_POST['cor_secundaria'] ?? ($config['cor_secundaria'] ?? '#6c757d'),
 
         'sla_prazo_resposta_min'    => (int)($_POST['sla_prazo_resposta_min']    ?? 30),
         'sla_prazo_solucao_padrao'  => (int)($_POST['sla_prazo_solucao_padrao'] ?? 48),
@@ -208,6 +208,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $erro = 'Erro ao salvar configurações: '.$e->getMessage();
         }
     }
+}
+
+$corPrimariaInput = trim((string)($config['cor_primaria'] ?? ''));
+if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $corPrimariaInput)) {
+    $corPrimariaInput = '#0d6efd';
 }
 
 include __DIR__.'/_layout_start.php';
@@ -484,18 +489,9 @@ include __DIR__.'/_sidebar.php';
                     <label class="form-label">Cor Primária</label>
                     <div class="hf-color-field">
                       <input type="color" class="form-control form-control-color"
-                             name="cor_primaria"
-                             value="<?php echo htmlspecialchars($config['cor_primaria']); ?>">
-                      <span><?php echo htmlspecialchars($config['cor_primaria']); ?></span>
-                    </div>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label">Cor Secundária</label>
-                    <div class="hf-color-field">
-                      <input type="color" class="form-control form-control-color"
-                             name="cor_secundaria"
-                             value="<?php echo htmlspecialchars($config['cor_secundaria']); ?>">
-                      <span><?php echo htmlspecialchars($config['cor_secundaria']); ?></span>
+                            name="cor_primaria"
+                            value="<?php echo htmlspecialchars($corPrimariaInput); ?>">
+                      <span><?php echo htmlspecialchars($corPrimariaInput); ?></span>
                     </div>
                   </div>
                 </div>
