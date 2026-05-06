@@ -1424,6 +1424,7 @@ document.querySelectorAll('[data-gd]').forEach(btn=>{
     msg.style.display='none'; msg.textContent='';
 
     const fd = new FormData(form);
+    fd.append('csrf_token', <?= json_encode($csrfToken) ?>);
     try{
       const r = await fetch('/cliente_quick_save.php', { method:'POST', body: fd });
       const j = await r.json();
