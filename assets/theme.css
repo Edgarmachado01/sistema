@@ -493,3 +493,39 @@
 [data-bs-theme="dark"] .hf-menu-item:hover {
   background: rgba(var(--bs-primary-rgb), .105);
 }
+/* Ajuste de contraste do usuário no topbar */
+.hf-user-toggle,
+.hf-user-toggle:hover,
+.hf-user-toggle:focus {
+  color: #fff;
+}
+
+.hf-user-toggle .hf-user-copy,
+.hf-user-toggle .hf-user-name {
+  color: #fff;
+}
+
+.hf-user-toggle .hf-user-role {
+  color: rgba(255, 255, 255, .76);
+}
+
+.hf-user-toggle .hf-user-name,
+.hf-user-toggle .hf-user-role {
+  text-shadow: 0 1px 1px rgba(15, 23, 42, .18);
+}
+/* Corrige avatar do usuário no topbar */
+.hf-user-toggle .hf-user-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  margin: 0;
+  border-radius: 999px;
+  color: var(--bs-primary) !important;
+  background: #fff;
+  font-size: .78rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: none;
+}

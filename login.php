@@ -1,35 +1,66 @@
 <?php
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
-if (session_status()===PHP_SESSION_NONE) session_start();
-require_once __DIR__.'/db.php';
-
-// carrega branding se existir brand.php
-$brand = ['name'=>'Help Fácil','primary'=>'#0d6efd','mode'=>'light','logo'=>null,'slug'=>null];
-if (file_exists(__DIR__.'/brand.php')) {
-  require_once __DIR__.'/brand.php';
-  $brand = brandFromRequest();
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
 }
 
+require_once __DIR__.'/db.php';
+
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
 $err = '';
-if ($_SERVER['REQUEST_METHOD']==='POST'){
-  $slug  = trim($_POST['empresa'] ?? '');
-  $email = trim($_POST['email'] ?? '');
-  $pass  = (string)($_POST['senha'] ?? '');
 
-  $tenant = $slug !== '' ? findTenantBySlug($slug) : null;
-  $tenantId = $tenant['id'] ?? null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $sessionToken = $_SESSION['csrf_token'] ?? '';
+  $postToken    = $_POST['csrf_token'] ?? '';
 
-  $user = findUserByEmail($tenantId, $email);
-  if ($user && password_verify($pass, $user['password_hash'])) {
-    $_SESSION['USER_ID']   = $user['id'];
-    $_SESSION['TENANT_ID'] = $user['tenant_id'];              // null => SYS_ADMIN
-    $_SESSION['ROLES']     = getUserRoles($user['id']);
-    $_SESSION['TENANT_SLUG'] = $tenant['slug'] ?? null;
-    header('Location: /home.php');
-    exit;
+  if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+    $err = 'Não foi possível acessar com os dados informados.';
   } else {
-    $err = 'Usuário/senha/empresa inválidos ou inativos.';
+    $slug  = trim($_POST['empresa'] ?? '');
+    $email = strtolower(trim($_POST['email'] ?? ''));
+    $pass  = (string)($_POST['senha'] ?? '');
+
+    if ($slug === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || $pass === '') {
+      $err = 'Não foi possível acessar com os dados informados.';
+    } else {
+      try {
+        $tenant = findTenantBySlug($slug);
+
+        if (!$tenant || empty($tenant['id'])) {
+          $err = 'Não foi possível acessar com os dados informados.';
+        } else {
+          $tenantId = (int)$tenant['id'];
+          $user = findUserByEmail($tenantId, $email);
+
+          $userTenantId = isset($user['tenant_id']) ? (int)$user['tenant_id'] : 0;
+
+          if (
+            $user &&
+            $userTenantId > 0 &&
+            $userTenantId === $tenantId &&
+            password_verify($pass, $user['password_hash'])
+          ) {
+            session_regenerate_id(true);
+
+            $_SESSION['USER_ID']     = $user['id'];
+            $_SESSION['TENANT_ID']   = $user['tenant_id'];
+            $_SESSION['ROLES']       = getUserRoles($user['id']);
+            $_SESSION['TENANT_SLUG'] = $tenant['slug'] ?? null;
+
+            header('Location: /home.php');
+            exit;
+          }
+
+          $err = 'Não foi possível acessar com os dados informados.';
+        }
+      } catch (Exception $e) {
+        error_log('login.php autenticação: '.$e->getMessage());
+        $err = 'Não foi possível acessar com os dados informados.';
+      }
+    }
   }
 }
 ?><!doctype html>
@@ -37,13 +68,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Login — Help Fácil</title>
+  <title>Login — HelpDesk Fácil</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>
     :root {
-      --hf-login-primary: var(--bs-primary, #0d6efd);
-      --hf-login-primary-rgb: var(--bs-primary-rgb, 13, 110, 253);
+      --hf-login-primary: #0d6efd;
+      --hf-login-primary-rgb: 13, 110, 253;
     }
 
     body {
@@ -82,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
     }
 
     .hf-logo-wrap {
-      min-height: 58px;
+      min-height: 74px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -90,29 +122,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
     }
 
     .hf-login-logo {
-      max-height: 54px;
-      max-width: 220px;
+      max-height: 72px;
+      max-width: 260px;
       object-fit: contain;
-    }
-
-    .hf-brand-fallback {
-      display: inline-flex;
-      align-items: center;
-      gap: .65rem;
-      color: #0f172a;
-      font-size: 1.05rem;
-      font-weight: 850;
-    }
-
-    .brand-dot {
-      width: 38px;
-      height: 38px;
-      display: inline-grid;
-      place-items: center;
-      border-radius: .9rem;
-      color: #fff;
-      background: var(--hf-login-primary);
-      box-shadow: 0 10px 22px rgba(var(--hf-login-primary-rgb), .22);
     }
 
     .hf-login-title {
@@ -193,18 +205,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
       color: #64748b;
     }
 
-    .hf-tenant-pill {
-      display: inline-flex;
-      align-items: center;
-      min-height: 26px;
-      margin-left: .25rem;
-      padding: .18rem .55rem;
-      border-radius: 999px;
-      color: var(--hf-login-primary);
-      background: rgba(var(--hf-login-primary-rgb), .10);
-      font-weight: 800;
-    }
-
     @media (max-width: 575.98px) {
       body {
         align-items: flex-start;
@@ -221,40 +221,34 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
       }
     }
   </style>
-  <?php if (function_exists('echoBrandStyle')) echoBrandStyle($brand); ?>
 </head>
 <body>
   <main class="hf-login-shell">
     <div class="hf-login-card">
       <div class="hf-login-head">
         <div class="hf-logo-wrap">
-          <?php if (!empty($brand['logo'])): ?>
-            <img src="<?=htmlspecialchars($brand['logo'])?>" alt="Logo" class="hf-login-logo">
-          <?php else: ?>
-            <div class="hf-brand-fallback">
-              <span class="brand-dot"><i class="bi bi-tools"></i></span>
-              <span><?=htmlspecialchars($brand['name'])?></span>
-            </div>
-          <?php endif; ?>
+          <img src="/logo.png" alt="HelpDesk Fácil" class="hf-login-logo">
         </div>
 
-        <h1 class="hf-login-title">Acesse sua conta</h1>
-        <div class="hf-login-subtitle">Entre para gerenciar ordens, clientes e financeiro.</div>
+       
+        <div class="hf-login-subtitle">Acesse sua conta para gerenciar atendimentos, clientes e financeiro.</div>
       </div>
 
       <div class="hf-login-body">
-        <?php if($err): ?>
+        <?php if ($err): ?>
           <div class="alert hf-login-alert py-2 mb-3">
-            <i class="bi bi-exclamation-triangle me-2"></i><?=$err?>
+            <i class="bi bi-exclamation-triangle me-2"></i><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?>
           </div>
         <?php endif; ?>
 
         <form method="post">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+
           <div class="mb-3">
-            <label class="form-label">Empresa (slug)</label>
+            <label class="form-label">Código da empresa</label>
             <div class="hf-input-icon">
               <i class="bi bi-building"></i>
-              <input name="empresa" class="form-control" placeholder="ex: cjweb (deixe vazio para SYS_ADMIN)">
+              <input name="empresa" class="form-control" placeholder="Informe o código da sua empresa" autocomplete="organization" required>
             </div>
           </div>
 
@@ -262,7 +256,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
             <label class="form-label">E-mail</label>
             <div class="hf-input-icon">
               <i class="bi bi-envelope"></i>
-              <input name="email" type="email" class="form-control" required>
+              <input name="email" type="email" class="form-control" autocomplete="username" required>
             </div>
           </div>
 
@@ -270,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
             <label class="form-label">Senha</label>
             <div class="hf-input-icon">
               <i class="bi bi-lock"></i>
-              <input name="senha" type="password" class="form-control" required>
+              <input name="senha" type="password" class="form-control" autocomplete="current-password" required>
             </div>
           </div>
 
@@ -280,10 +274,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST'){
         </form>
 
         <div class="hf-login-foot">
-          <small>
-            Tema detectado para
-            <span class="hf-tenant-pill"><?=htmlspecialchars($brand['slug'] ?? 'padrão')?></span>
-          </small>
+          <small>Acesso seguro ao painel</small>
         </div>
       </div>
     </div>
