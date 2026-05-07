@@ -52,6 +52,11 @@
       <span class="hf-menu-label">Lançamentos</span>
     </a>
 
+    <a class="nav-link hf-menu-item <?= ($_GET['m']??'')==='relatorios'?'active':'' ?>" href="/relatorios.php?m=relatorios" title="Relatórios">
+      <span class="hf-ico hf-menu-icon"><i class="bi bi-bar-chart-line"></i></span>
+      <span class="hf-menu-label">Relatórios</span>
+    </a>
+
     <?php if (isAdminLoja()): ?>
     <a class="nav-link hf-menu-item <?= ($_GET['m'] ?? '') === 'hf' ? 'active' : '' ?>" href="/config_empresa.php?m=hf" title="Configurações">
       <span class="hf-ico hf-menu-icon"><i class="bi bi-gear"></i></span>
