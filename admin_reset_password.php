@@ -3,30 +3,126 @@ require_once __DIR__.'/auth.php';
 requireAdmin();
 require_once __DIR__.'/db.php';
 
+$pdo = db();
+
+$tenantRaw = tenantId();
+$tenant = ($tenantRaw === '' || $tenantRaw === null) ? null : (int)$tenantRaw;
+
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
 $msg = $err = '';
-if ($_SERVER['REQUEST_METHOD']==='POST') {
+
+if (!empty($_SESSION['HF_RESET_PASSWORD_OK'])) {
+  $msg = $_SESSION['HF_RESET_PASSWORD_OK'];
+  unset($_SESSION['HF_RESET_PASSWORD_OK']);
+}
+
+if (!empty($_SESSION['HF_RESET_PASSWORD_ERROR'])) {
+  $err = $_SESSION['HF_RESET_PASSWORD_ERROR'];
+  unset($_SESSION['HF_RESET_PASSWORD_ERROR']);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $redirectTo = 'admin_reset_password.php?m=reset_senha';
+
+  $sessionToken = $_SESSION['csrf_token'] ?? '';
+  $postToken    = $_POST['csrf_token'] ?? '';
+
+  if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+    $_SESSION['HF_RESET_PASSWORD_ERROR'] = 'Sessão expirada. Recarregue a página e tente novamente.';
+    header('Location: '.$redirectTo);
+    exit;
+  }
+
   $email = trim($_POST['email'] ?? '');
-  $temp  = trim($_POST['nova']  ?? ''); // ex: gerar manualmente uma provisória
-  if ($email==='' || $temp==='') { $err = 'Preencha e-mail e nova senha temporária.'; }
-  else {
-    // restringe ao mesmo tenant, exceto SYS_ADMIN global
-    $tenant = tenantId();
-    if ($tenant) {
-      $st = db()->prepare("SELECT id FROM users WHERE email=? AND tenant_id <=> ?");
-      $st->execute([$email, $tenant]);
+  $temp  = trim($_POST['nova']  ?? '');
+
+  if ($email === '' || $temp === '') {
+    $_SESSION['HF_RESET_PASSWORD_ERROR'] = 'Preencha e-mail e nova senha temporária.';
+    header('Location: '.$redirectTo);
+    exit;
+  }
+
+  if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    $_SESSION['HF_RESET_PASSWORD_ERROR'] = 'E-mail inválido.';
+    header('Location: '.$redirectTo);
+    exit;
+  }
+
+  if (strlen($temp) < 8) {
+    $_SESSION['HF_RESET_PASSWORD_ERROR'] = 'A senha temporária deve ter no mínimo 8 caracteres.';
+    header('Location: '.$redirectTo);
+    exit;
+  }
+
+  try {
+    if ($tenant !== null) {
+      $st = $pdo->prepare("
+        SELECT id, tenant_id
+        FROM users
+        WHERE email = :email
+          AND (tenant_id <=> :tenant_id)
+        LIMIT 1
+      ");
+      $st->execute([
+        ':email'     => $email,
+        ':tenant_id' => $tenant,
+      ]);
     } else {
-      $st = db()->prepare("SELECT id FROM users WHERE email=?");
-      $st->execute([$email]);
+      $st = $pdo->prepare("
+        SELECT id, tenant_id
+        FROM users
+        WHERE email = :email
+        LIMIT 1
+      ");
+      $st->execute([
+        ':email' => $email,
+      ]);
     }
-    $u = $st->fetch();
-    if (!$u) { $err = 'Usuário não encontrado neste escopo.'; }
-    else {
-      $hash = password_hash($temp, PASSWORD_DEFAULT);
-      $up = db()->prepare("UPDATE users SET password_hash=?, is_active=1 WHERE id=?");
-      $up->execute([$hash, $u['id']]);
-      $msg = "Senha temporária definida para {$email}.";
-      // (opcional) enviar por e-mail essa temporária
+
+    $u = $st->fetch(PDO::FETCH_ASSOC);
+
+    if (!$u) {
+      $_SESSION['HF_RESET_PASSWORD_ERROR'] = 'Usuário não encontrado neste escopo.';
+      header('Location: '.$redirectTo);
+      exit;
     }
+
+    $targetTenant = ($u['tenant_id'] === '' || $u['tenant_id'] === null)
+      ? null
+      : (int)$u['tenant_id'];
+
+    $hash = password_hash($temp, PASSWORD_DEFAULT);
+
+    $up = $pdo->prepare("
+      UPDATE users
+      SET password_hash = :password_hash
+      WHERE id = :id
+        AND (tenant_id <=> :tenant_id)
+    ");
+    $up->execute([
+      ':password_hash' => $hash,
+      ':id'            => (int)$u['id'],
+      ':tenant_id'     => $targetTenant,
+    ]);
+
+    if ($up->rowCount() < 1) {
+      throw new Exception('Nenhum usuário atualizado no reset administrativo.');
+    }
+
+    $_SESSION['HF_RESET_PASSWORD_OK'] = 'Senha temporária definida para '.$email.'.';
+    header('Location: '.$redirectTo);
+    exit;
+
+  } catch (Exception $e) {
+    error_log('admin_reset_password.php reset senha: '.$e->getMessage());
+
+    $_SESSION['HF_RESET_PASSWORD_ERROR'] = 'Erro ao resetar senha. Tente novamente.';
+    header('Location: '.$redirectTo);
+    exit;
   }
 }
 
@@ -49,13 +145,13 @@ include __DIR__.'/_sidebar.php';
 
     <?php if($msg): ?>
       <div class="alert alert-success hf-reset-alert">
-        <i class="bi bi-check-circle me-2"></i><?=$msg?>
+        <i class="bi bi-check-circle me-2"></i><?= htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') ?>
       </div>
     <?php endif; ?>
 
     <?php if($err): ?>
       <div class="alert alert-danger hf-reset-alert">
-        <i class="bi bi-exclamation-triangle me-2"></i><?=$err?>
+        <i class="bi bi-exclamation-triangle me-2"></i><?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?>
       </div>
     <?php endif; ?>
 
@@ -72,6 +168,8 @@ include __DIR__.'/_sidebar.php';
         </div>
 
         <form method="post" class="hf-reset-form">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+
           <div class="mb-3">
             <label class="form-label">E-mail do usuário</label>
             <div class="hf-input-icon">

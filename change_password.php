@@ -5,29 +5,91 @@ require_once __DIR__.'/db.php';
 
 $pdo = db();
 
-$msg = $err = '';
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
+$msg = '';
+$err = '';
+
+if (!empty($_SESSION['HF_PASSWORD_FLASH_OK'])) {
+    $msg = $_SESSION['HF_PASSWORD_FLASH_OK'];
+    unset($_SESSION['HF_PASSWORD_FLASH_OK']);
+}
+
+if (!empty($_SESSION['HF_PASSWORD_FLASH_ERROR'])) {
+    $err = $_SESSION['HF_PASSWORD_FLASH_ERROR'];
+    unset($_SESSION['HF_PASSWORD_FLASH_ERROR']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $curr = $_POST['senha_atual'] ?? '';
-    $new1 = $_POST['nova_senha'] ?? '';
-    $new2 = $_POST['confirmar'] ?? '';
+    $redirectTo = 'change_password.php?m=senha';
+
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    $postToken    = $_POST['csrf_token'] ?? '';
+
+    if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+        $_SESSION['HF_PASSWORD_FLASH_ERROR'] = 'Sessão expirada. Recarregue a página e tente novamente.';
+        header('Location: '.$redirectTo);
+        exit;
+    }
+
+    $curr = (string)($_POST['senha_atual'] ?? '');
+    $new1 = (string)($_POST['nova_senha'] ?? '');
+    $new2 = (string)($_POST['confirmar'] ?? '');
+
+    if (trim($curr) === '' || trim($new1) === '' || trim($new2) === '') {
+        $_SESSION['HF_PASSWORD_FLASH_ERROR'] = 'Preencha todos os campos de senha.';
+        header('Location: '.$redirectTo);
+        exit;
+    }
+
+    if (strlen($new1) < 8) {
+        $_SESSION['HF_PASSWORD_FLASH_ERROR'] = 'A nova senha deve ter no mínimo 8 caracteres.';
+        header('Location: '.$redirectTo);
+        exit;
+    }
 
     if ($new1 !== $new2) {
-        $err = 'Confirmação diferente da nova senha.';
-    } else {
-        // pega usuário atual
+        $_SESSION['HF_PASSWORD_FLASH_ERROR'] = 'Confirmação diferente da nova senha.';
+        header('Location: '.$redirectTo);
+        exit;
+    }
+
+    try {
         $st = $pdo->prepare("SELECT id, password_hash FROM users WHERE id = ? AND is_active = 1");
         $st->execute([$_SESSION['USER_ID']]);
         $u = $st->fetch(PDO::FETCH_ASSOC);
 
         if (!$u || !password_verify($curr, $u['password_hash'])) {
-            $err = 'Senha atual inválida.';
-        } else {
-            $hash = password_hash($new1, PASSWORD_DEFAULT);
-            $up = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
-            $up->execute([$hash, $u['id']]);
-            $msg = 'Senha atualizada com sucesso.';
+            $_SESSION['HF_PASSWORD_FLASH_ERROR'] = 'Senha atual inválida.';
+            header('Location: '.$redirectTo);
+            exit;
         }
+
+        if (password_verify($new1, $u['password_hash'])) {
+            $_SESSION['HF_PASSWORD_FLASH_ERROR'] = 'A nova senha deve ser diferente da senha atual.';
+            header('Location: '.$redirectTo);
+            exit;
+        }
+
+        $hash = password_hash($new1, PASSWORD_DEFAULT);
+        $up = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+        $up->execute([$hash, $u['id']]);
+
+        session_regenerate_id(true);
+
+        $_SESSION['HF_PASSWORD_FLASH_OK'] = 'Senha atualizada com sucesso.';
+        header('Location: '.$redirectTo);
+        exit;
+
+    } catch (Exception $e) {
+        error_log('change_password.php trocar senha: '.$e->getMessage());
+
+        $_SESSION['HF_PASSWORD_FLASH_ERROR'] = 'Erro ao atualizar senha. Tente novamente.';
+        header('Location: '.$redirectTo);
+        exit;
     }
 }
 
@@ -76,6 +138,8 @@ include __DIR__.'/_sidebar.php';
         </div>
 
         <form method="post" autocomplete="off" class="hf-password-form">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+
           <div class="mb-3">
             <label class="form-label">Senha atual</label>
             <div class="hf-input-icon">

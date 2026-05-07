@@ -1,10 +1,6 @@
 <?php
 // usuarios.php — Gestão de usuários por empresa (TENANT_ADMIN / ATENDENTE)
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 require_once __DIR__.'/auth.php';
 requireAdmin();
 
@@ -18,6 +14,12 @@ $tenantId = function_exists('tenantId')
     : ($_SESSION['TENANT_ID'] ?? $_SESSION['tenant_id'] ?? null);
 
 $tenantId = ($tenantId === '' || $tenantId === null) ? null : (int)$tenantId;
+
+// ===== CSRF =====
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
 
 // ===== Roles permitidos na tela =====
 $sqlRoles = "SELECT id, role_key, label_pt
@@ -36,7 +38,17 @@ foreach ($roles as $r) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && ($_POST['acao'] ?? '') === 'salvar_usuario') {
 
-    $id       = isset($_POST['id']) && $_POST['id'] !== '' ? (int)$_POST['id'] : null;
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    $postToken    = $_POST['csrf_token'] ?? '';
+
+    if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+        $_SESSION['HF_USERS_FLASH_ERROR'] = 'Sessão expirada. Recarregue a página e tente novamente.';
+        header('Location: usuarios.php?m=usuarios');
+        exit;
+    }
+
+    $idRaw    = $_POST['id'] ?? '';
+    $id       = ($idRaw !== '' && ctype_digit((string)$idRaw)) ? (int)$idRaw : null;
     $nome     = trim($_POST['name'] ?? '');
     $email    = trim($_POST['email'] ?? '');
     $senha    = (string)($_POST['password'] ?? '');
@@ -52,7 +64,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         $flashError = 'E-mail inválido.';
     } elseif (!in_array($roleKey, ['TENANT_ADMIN', 'ATENDENTE'], true)) {
         $flashError = 'Papel inválido.';
-    } else {
+    } elseif (!$id && $senha === '') {
+        $flashError = 'Senha é obrigatória para novo usuário.';
+    } elseif ($senha !== '' && strlen($senha) < 8) {
+        $flashError = 'A senha deve ter no mínimo 8 caracteres.';
+    }
+
+    if ($flashError === '' && $id) {
+        try {
+            $stTarget = $pdo->prepare("
+                SELECT id
+                  FROM users
+                 WHERE id = :id
+                   AND (tenant_id <=> :tenant_id)
+                 LIMIT 1
+            ");
+            $stTarget->execute([
+                ':id'        => $id,
+                ':tenant_id' => $tenantId,
+            ]);
+
+            if (!$stTarget->fetchColumn()) {
+                $flashError = 'Usuário não encontrado neste escopo.';
+            }
+        } catch (Exception $e) {
+            error_log('usuarios.php validar tenant usuário: '.$e->getMessage());
+            $flashError = 'Erro ao validar usuário. Tente novamente.';
+        }
+    }
+
+    if ($flashError === '') {
         try {
             $pdo->beginTransaction();
 
@@ -81,47 +122,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     ':id'        => $id,
                 ]);
                 if ($stCheck->fetchColumn()) {
-                    throw new Exception('Já existe um usuário com este e-mail nesta empresa.');
+                    $flashError = 'Já existe um usuário com este e-mail nesta empresa.';
+                } else {
+                    $params = [
+                        ':name'      => $nome,
+                        ':email'     => $email,
+                        ':is_active' => $isActive,
+                        ':id'        => $id,
+                        ':tenant_id' => $tenantId,
+                    ];
+
+                    $sqlUpd = "UPDATE users
+                                  SET name = :name,
+                                      email = :email,
+                                      is_active = :is_active";
+
+                    if ($senha !== '') {
+                        $hash     = password_hash($senha, PASSWORD_DEFAULT);
+                        $sqlUpd  .= ", password_hash = :password_hash";
+                        $params[':password_hash'] = $hash;
+                    }
+
+                    $sqlUpd .= " WHERE id = :id
+                                   AND (tenant_id <=> :tenant_id)";
+
+                    $stUpd = $pdo->prepare($sqlUpd);
+                    $stUpd->execute($params);
+
+                    // Atualiza role somente do usuário já validado no tenant atual
+                    $pdo->prepare("
+                        DELETE ur
+                          FROM user_roles ur
+                          JOIN users u ON u.id = ur.user_id
+                         WHERE ur.user_id = :uid
+                           AND (u.tenant_id <=> :tenant_id)
+                    ")->execute([
+                        ':uid'       => $id,
+                        ':tenant_id' => $tenantId,
+                    ]);
+
+                    $pdo->prepare("INSERT INTO user_roles (user_id, role_id) VALUES (:uid, :rid)")
+                        ->execute([':uid' => $id, ':rid' => $roleId]);
+
+                    $flashOk = 'Usuário atualizado com sucesso.';
                 }
-
-                $params = [
-                    ':name'      => $nome,
-                    ':email'     => $email,
-                    ':is_active' => $isActive,
-                    ':id'        => $id,
-                ];
-
-                $sqlUpd = "UPDATE users
-                              SET name = :name,
-                                  email = :email,
-                                  is_active = :is_active";
-
-                if ($senha !== '') {
-                    $hash     = password_hash($senha, PASSWORD_DEFAULT);
-                    $sqlUpd  .= ", password_hash = :password_hash";
-                    $params[':password_hash'] = $hash;
-                }
-
-                $sqlUpd .= " WHERE id = :id";
-
-                $stUpd = $pdo->prepare($sqlUpd);
-                $stUpd->execute($params);
-
-                // Atualiza role
-                $pdo->prepare("DELETE FROM user_roles WHERE user_id = :uid")
-                    ->execute([':uid' => $id]);
-
-                $pdo->prepare("INSERT INTO user_roles (user_id, role_id) VALUES (:uid, :rid)")
-                    ->execute([':uid' => $id, ':rid' => $roleId]);
-
-                $flashOk = 'Usuário atualizado com sucesso.';
 
             } else {
                 // ===== INSERT =====
-                if ($senha === '') {
-                    throw new Exception('Senha é obrigatória para novo usuário.');
-                }
-
                 $hash = password_hash($senha, PASSWORD_DEFAULT);
 
                 // Checa duplicidade de e-mail por tenant
@@ -135,37 +182,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     ':tenant_id' => $tenantId,
                 ]);
                 if ($stCheck->fetchColumn()) {
-                    throw new Exception('Já existe um usuário com este e-mail nesta empresa.');
+                    $flashError = 'Já existe um usuário com este e-mail nesta empresa.';
+                } else {
+                    $sqlIns = "INSERT INTO users (name, email, password_hash, tenant_id, is_active, created_at)
+                               VALUES (:name, :email, :password_hash, :tenant_id, :is_active, NOW())";
+                    $stIns = $pdo->prepare($sqlIns);
+                    $stIns->execute([
+                        ':name'          => $nome,
+                        ':email'         => $email,
+                        ':password_hash' => $hash,
+                        ':tenant_id'     => $tenantId,
+                        ':is_active'     => $isActive,
+                    ]);
+                    $newUserId = (int)$pdo->lastInsertId();
+
+                    $pdo->prepare("INSERT INTO user_roles (user_id, role_id) VALUES (:uid, :rid)")
+                        ->execute([':uid' => $newUserId, ':rid' => $roleId]);
+
+                    $flashOk = 'Usuário criado com sucesso.';
                 }
-
-                $sqlIns = "INSERT INTO users (name, email, password_hash, tenant_id, is_active, created_at)
-                           VALUES (:name, :email, :password_hash, :tenant_id, :is_active, NOW())";
-                $stIns = $pdo->prepare($sqlIns);
-                $stIns->execute([
-                    ':name'          => $nome,
-                    ':email'         => $email,
-                    ':password_hash' => $hash,
-                    ':tenant_id'     => $tenantId,
-                    ':is_active'     => $isActive,
-                ]);
-                $newUserId = (int)$pdo->lastInsertId();
-
-                $pdo->prepare("INSERT INTO user_roles (user_id, role_id) VALUES (:uid, :rid)")
-                    ->execute([':uid' => $newUserId, ':rid' => $roleId]);
-
-                $flashOk = 'Usuário criado com sucesso.';
             }
 
-            $pdo->commit();
+            if ($flashError !== '') {
+                $pdo->rollBack();
+            } else {
+                $pdo->commit();
+            }
 
         } catch (Exception $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            error_log('usuarios.php salvar_usuario: '.$e->getMessage());
+
             $msg = $e->getMessage();
-            if (strpos($msg, 'Já existe um usuário com este e-mail nesta empresa.') !== false ||
-                strpos($msg, 'uq_tenant_email') !== false) {
+            if (strpos($msg, 'uq_tenant_email') !== false) {
                 $flashError = 'Já existe um usuário com este e-mail nesta empresa.';
             } else {
-                $flashError = 'Erro ao salvar usuário: '.$msg;
+                $flashError = 'Erro ao salvar usuário. Tente novamente.';
             }
         }
     }
@@ -266,11 +321,11 @@ include __DIR__.'/_sidebar.php';
 
     <?php if ($erro): ?>
       <div class="alert alert-danger hf-users-alert">
-        <i class="bi bi-exclamation-triangle me-2"></i><?=$erro?>
+        <i class="bi bi-exclamation-triangle me-2"></i><?= htmlspecialchars($erro, ENT_QUOTES, 'UTF-8') ?>
       </div>
     <?php elseif ($mensagem): ?>
       <div class="alert alert-success hf-users-alert">
-        <i class="bi bi-check-circle me-2"></i><?=$mensagem?>
+        <i class="bi bi-check-circle me-2"></i><?= htmlspecialchars($mensagem, ENT_QUOTES, 'UTF-8') ?>
       </div>
     <?php endif; ?>
 
@@ -289,6 +344,7 @@ include __DIR__.'/_sidebar.php';
       <div class="hf-users-card-body">
         <form method="post" autocomplete="off">
           <input type="hidden" name="acao" value="salvar_usuario">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
           <input type="hidden" name="id"
                  value="<?= $editUser ? (int)$editUser['id'] : '' ?>">
 
