@@ -43,12 +43,11 @@ requireLogin();
         </span>
       </a>
 
-      <div class="hf-report-card hf-report-card-muted" aria-disabled="true">
+      <a class="hf-report-card hf-report-card-muted" href="/relatorio_financeiro.php?m=relatorios">
         <span class="hf-report-topline">
           <span class="hf-report-icon">
             <i class="bi bi-cash-coin"></i>
           </span>
-          <span class="hf-coming-label">Em breve</span>
         </span>
 
         <span class="hf-report-body">
@@ -57,7 +56,12 @@ requireLogin();
             Consolida&ccedil;&atilde;o de receitas, recebimentos, despesas e previs&atilde;o de caixa.
           </span>
         </span>
-      </div>
+
+        <span class="hf-report-footer">
+          <span>Visualizar relat&oacute;rio</span>
+          <i class="bi bi-arrow-right"></i>
+        </span>
+      </a>
 
       <div class="hf-report-card hf-report-card-muted" aria-disabled="true">
         <span class="hf-report-topline">
@@ -179,6 +183,14 @@ requireLogin();
   background: rgba(255, 255, 255, .78);
 }
 
+a.hf-report-card-muted:hover {
+  color: inherit;
+  transform: translateY(-3px);
+  border-color: rgba(var(--bs-primary-rgb), .30);
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .09);
+}
+
 .hf-report-topline {
   display: flex;
   align-items: flex-start;
@@ -273,6 +285,13 @@ requireLogin();
   box-shadow: 0 10px 18px rgba(var(--bs-primary-rgb), .18);
 }
 
+a.hf-report-card-muted:hover .hf-report-footer {
+  color: #fff;
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+  box-shadow: 0 10px 18px rgba(var(--bs-primary-rgb), .16);
+}
+
 @media (max-width: 1199.98px) {
   .hf-report-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -341,6 +360,10 @@ requireLogin();
 }
 
 [data-bs-theme="dark"] .hf-report-card-primary:hover {
+  background: rgba(17, 24, 39, .98);
+}
+
+[data-bs-theme="dark"] a.hf-report-card-muted:hover {
   background: rgba(17, 24, 39, .98);
 }
 
