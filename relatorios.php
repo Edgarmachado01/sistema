@@ -63,21 +63,25 @@ requireLogin();
         </span>
       </a>
 
-      <div class="hf-report-card hf-report-card-muted" aria-disabled="true">
+      <a class="hf-report-card hf-report-card-muted" href="/relatorio_clientes.php">
         <span class="hf-report-topline">
           <span class="hf-report-icon">
             <i class="bi bi-people"></i>
           </span>
-          <span class="hf-coming-label">Em breve</span>
         </span>
 
         <span class="hf-report-body">
           <span class="hf-report-title">Clientes</span>
           <span class="hf-report-text">
-            An&aacute;lises de carteira, recorr&ecirc;ncia e hist&oacute;rico de atendimento.
+            Analise regi&otilde;es atendidas, recorr&ecirc;ncia e movimenta&ccedil;&atilde;o da carteira.
           </span>
         </span>
-      </div>
+
+        <span class="hf-report-footer">
+          <span>Abrir relat&oacute;rio</span>
+          <i class="bi bi-arrow-right"></i>
+        </span>
+      </a>
     </section>
   </div>
 </main>
