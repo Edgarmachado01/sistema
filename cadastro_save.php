@@ -10,10 +10,16 @@ function hfSignupPlanosPermitidos()
     return ['basico', 'profissional', 'premium'];
 }
 
+function hfSignupPlanoValido($plano)
+{
+    $plano = strtolower(trim((string)$plano));
+    return in_array($plano, hfSignupPlanosPermitidos(), true);
+}
+
 function hfSignupPlanoSeguro($plano)
 {
     $plano = strtolower(trim((string)$plano));
-    return in_array($plano, hfSignupPlanosPermitidos(), true) ? $plano : 'profissional';
+    return hfSignupPlanoValido($plano) ? $plano : 'profissional';
 }
 
 function hfSignupOldInput($data)
@@ -111,7 +117,8 @@ $whatsapp = trim((string)($_POST['whatsapp'] ?? ''));
 $slugInformado = trim((string)($_POST['empresa_slug'] ?? ''));
 $senha = (string)($_POST['senha'] ?? '');
 $senhaConfirmar = (string)($_POST['senha_confirmar'] ?? '');
-$plano = hfSignupPlanoSeguro($_POST['plano'] ?? 'profissional');
+$planoRecebido = strtolower(trim((string)($_POST['plano'] ?? '')));
+$plano = hfSignupPlanoSeguro($planoRecebido);
 
 $oldInput = hfSignupOldInput([
     'empresa_nome' => $empresaNome,
@@ -138,6 +145,10 @@ if ($whatsapp === '') {
     hfSignupRedirectError('Informe o WhatsApp da empresa.', $oldInput);
 }
 
+if (!hfSignupPlanoValido($planoRecebido)) {
+    hfSignupRedirectError('Escolha um plano valido para iniciar o teste gratis.', $oldInput);
+}
+
 $slug = hfSignupNormalizeSlug($slugInformado);
 $oldInput['empresa_slug'] = $slug;
 
@@ -157,6 +168,8 @@ if ($senha !== $senhaConfirmar) {
     hfSignupRedirectError('Senha e confirmacao nao conferem.', $oldInput);
 }
 
+$userFriendlyError = 'Nao foi possivel criar o teste gratis. Revise os dados e tente novamente.';
+
 try {
     $pdo = db();
 
@@ -167,6 +180,34 @@ try {
     }
 
     $pdo->beginTransaction();
+
+    $stPlan = $pdo->prepare("
+        SELECT id, code, name, trial_days
+        FROM plans
+        WHERE code = :code
+          AND is_active = 1
+        LIMIT 1
+    ");
+    $stPlan->execute([':code' => $plano]);
+    $plan = $stPlan->fetch(PDO::FETCH_ASSOC);
+
+    if (!$plan || empty($plan['id'])) {
+        $userFriendlyError = 'O plano escolhido nao esta disponivel no momento. Escolha outro plano e tente novamente.';
+        throw new RuntimeException('Plano indisponivel no cadastro: '.$plano);
+    }
+
+    $planId = (int)$plan['id'];
+    $planName = trim((string)($plan['name'] ?? ''));
+    $trialDays = (int)($plan['trial_days'] ?? 14);
+
+    if ($planId <= 0) {
+        $userFriendlyError = 'O plano escolhido nao esta disponivel no momento. Escolha outro plano e tente novamente.';
+        throw new RuntimeException('Plano sem ID valido no cadastro: '.$plano);
+    }
+
+    if ($trialDays <= 0) {
+        $trialDays = 14;
+    }
 
     $sqlTenant = "
         INSERT INTO tenants (
@@ -193,6 +234,47 @@ try {
     if ($tenantId <= 0) {
         throw new Exception('Tenant nao foi criado.');
     }
+
+    $sqlSubscription = "
+        INSERT INTO tenant_subscriptions (
+            tenant_id,
+            plan_id,
+            status,
+            trial_start_at,
+            trial_end_at,
+            current_period_start,
+            current_period_end
+        ) VALUES (
+            :tenant_id,
+            :plan_id,
+            'trial',
+            NOW(),
+            DATE_ADD(NOW(), INTERVAL :trial_days DAY),
+            NOW(),
+            DATE_ADD(NOW(), INTERVAL :trial_days_end DAY)
+        )
+    ";
+    $stSubscription = $pdo->prepare($sqlSubscription);
+    $stSubscription->execute([
+        ':tenant_id' => $tenantId,
+        ':plan_id' => $planId,
+        ':trial_days' => $trialDays,
+        ':trial_days_end' => $trialDays,
+    ]);
+
+    $subscriptionId = (int)$pdo->lastInsertId();
+    if ($subscriptionId <= 0) {
+        throw new Exception('Assinatura comercial nao foi criada.');
+    }
+
+    $stTrial = $pdo->prepare("
+        SELECT trial_end_at
+        FROM tenant_subscriptions
+        WHERE id = :id
+        LIMIT 1
+    ");
+    $stTrial->execute([':id' => $subscriptionId]);
+    $trialEndAt = (string)$stTrial->fetchColumn();
 
     $sqlConfig = "
         INSERT INTO tenant_config (
@@ -332,6 +414,9 @@ try {
         'responsavel_nome' => $responsavelNome,
         'email' => $email,
         'plano' => $plano,
+        'plano_nome' => $planName !== '' ? $planName : ucfirst($plano),
+        'trial_days' => $trialDays,
+        'trial_end_at' => $trialEndAt,
     ];
     unset($_SESSION['HF_SIGNUP_ERROR'], $_SESSION['HF_SIGNUP_OLD']);
 
@@ -349,5 +434,5 @@ try {
         hfSignupRedirectError('Este codigo de empresa ja esta em uso. Escolha outro.', $oldInput);
     }
 
-    hfSignupRedirectError('Nao foi possivel criar o teste gratis. Revise os dados e tente novamente.', $oldInput);
+    hfSignupRedirectError($userFriendlyError, $oldInput);
 }

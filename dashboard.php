@@ -500,6 +500,105 @@ $urlFinRecebido  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
 $urlFinAberto    = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' => 'aberto']);
 $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' => 'atrasado']);
 
+// ===== Onboarding inicial do tenant =====
+$onboardingCard = null;
+$showOnboarding = $tid > 0
+    && function_exists('isAdminLoja')
+    && isAdminLoja()
+    && !(function_exists('isSysAdmin') && isSysAdmin());
+
+if ($showOnboarding) {
+    try {
+        $colDeletedClientes = pickColumnForTable($pdo, 'hf_clientes', ['deleted_at']);
+        $colDeletedProdutos = pickColumnForTable($pdo, 'hf_produtos', ['deleted_at']);
+        $colDeletedServicos = pickColumnForTable($pdo, 'hf_servicos', ['deleted_at']);
+        $colDeletedOs       = pickColumnForTable($pdo, 'hf_os', ['deleted_at']);
+
+        $whereClientes = 'tenant_id = ?' . ($colDeletedClientes ? " AND `{$colDeletedClientes}` IS NULL" : '');
+        $whereProdutos = 'tenant_id = ?' . ($colDeletedProdutos ? " AND `{$colDeletedProdutos}` IS NULL" : '');
+        $whereServicos = 'tenant_id = ?' . ($colDeletedServicos ? " AND `{$colDeletedServicos}` IS NULL" : '');
+        $whereOs       = 'tenant_id = ?' . ($colDeletedOs ? " AND `{$colDeletedOs}` IS NULL" : '');
+
+        $sqlOnboarding = "
+            SELECT
+              (SELECT COUNT(*) FROM hf_clientes WHERE {$whereClientes}) AS clientes_count,
+              (SELECT COUNT(*) FROM hf_produtos WHERE {$whereProdutos}) AS produtos_count,
+              (SELECT COUNT(*) FROM hf_servicos WHERE {$whereServicos}) AS servicos_count,
+              (SELECT COUNT(*) FROM hf_os WHERE {$whereOs}) AS os_count,
+              (SELECT COUNT(*) FROM hf_os WHERE {$whereOs} AND status IN ('concluida','finalizada','fechada')) AS os_concluidas_count
+        ";
+        $stmtOnboarding = $pdo->prepare($sqlOnboarding);
+        $stmtOnboarding->execute([$tid, $tid, $tid, $tid, $tid]);
+        $onboardingCounts = $stmtOnboarding->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $onboardingSteps = [
+            [
+                'key' => 'cliente',
+                'title' => 'Cadastrar primeiro cliente',
+                'text' => 'Crie a base para abrir atendimentos com histórico.',
+                'icon' => 'bi-people',
+                'url' => '/cliente_form.php',
+                'done' => ((int)($onboardingCounts['clientes_count'] ?? 0)) > 0,
+            ],
+            [
+                'key' => 'servico',
+                'title' => 'Cadastrar primeiro serviço',
+                'text' => 'Padronize mão de obra, preço e garantia.',
+                'icon' => 'bi-tools',
+                'url' => '/servico_form.php',
+                'done' => ((int)($onboardingCounts['servicos_count'] ?? 0)) > 0,
+            ],
+            [
+                'key' => 'produto',
+                'title' => 'Cadastrar primeiro produto',
+                'text' => 'Organize peças, itens e valores usados nas OS.',
+                'icon' => 'bi-box-seam',
+                'url' => '/produto_form.php',
+                'done' => ((int)($onboardingCounts['produtos_count'] ?? 0)) > 0,
+            ],
+            [
+                'key' => 'os',
+                'title' => 'Criar primeira OS',
+                'text' => 'Registre o primeiro atendimento da operação.',
+                'icon' => 'bi-clipboard2-check',
+                'url' => '/os_form.php',
+                'done' => ((int)($onboardingCounts['os_count'] ?? 0)) > 0,
+            ],
+            [
+                'key' => 'os_concluida',
+                'title' => 'Finalizar primeira OS',
+                'text' => 'Feche o ciclo e veja o controle funcionando.',
+                'icon' => 'bi-check2-circle',
+                'url' => '/os_list.php',
+                'done' => ((int)($onboardingCounts['os_concluidas_count'] ?? 0)) > 0,
+            ],
+        ];
+
+        $completedSteps = 0;
+        $nextStep = null;
+        foreach ($onboardingSteps as $step) {
+            if (!empty($step['done'])) {
+                $completedSteps++;
+            } elseif ($nextStep === null) {
+                $nextStep = $step;
+            }
+        }
+
+        $totalSteps = count($onboardingSteps);
+        if ($completedSteps < $totalSteps && $nextStep !== null) {
+            $onboardingCard = [
+                'steps' => $onboardingSteps,
+                'completed' => $completedSteps,
+                'total' => $totalSteps,
+                'progress' => (int)round(($completedSteps / max($totalSteps, 1)) * 100),
+                'next' => $nextStep,
+            ];
+        }
+    } catch (Exception $e) {
+        error_log('dashboard.php onboarding: '.$e->getMessage());
+    }
+}
+
 ?>
 <?php include __DIR__.'/_layout_start.php'; ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
@@ -553,6 +652,80 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
         </div>
       </form>
     </div>
+
+    <?php if ($onboardingCard): ?>
+      <?php
+        $nextStep = $onboardingCard['next'];
+        $onboardingStorageKey = 'hf_onboarding_minimized_'.$tid;
+      ?>
+      <section class="hf-onboarding-card" data-onboarding-card data-storage-key="<?= htmlspecialchars($onboardingStorageKey, ENT_QUOTES, 'UTF-8') ?>">
+        <div class="hf-onboarding-main">
+          <div class="hf-onboarding-head">
+            <span class="hf-onboarding-kicker">
+              <i class="bi bi-stars" aria-hidden="true"></i>
+              Primeiros passos
+            </span>
+            <button type="button" class="btn hf-onboarding-minimize" data-onboarding-minimize title="Minimizar onboarding" aria-label="Minimizar onboarding">
+              <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="hf-onboarding-title-row">
+            <div>
+              <h5>Comece pelo essencial</h5>
+              <p>Complete estes passos para colocar sua operação para rodar.</p>
+            </div>
+            <div class="hf-onboarding-progress-number"><?= (int)$onboardingCard['progress'] ?>%</div>
+          </div>
+
+          <div class="hf-onboarding-progress" aria-label="Progresso do onboarding">
+            <span style="width: <?= (int)$onboardingCard['progress'] ?>%"></span>
+          </div>
+
+          <div class="hf-onboarding-summary">
+            Você já concluiu <strong><?= (int)$onboardingCard['completed'] ?></strong> de <strong><?= (int)$onboardingCard['total'] ?></strong> etapas.
+          </div>
+        </div>
+
+        <div class="hf-onboarding-next">
+          <span>Próximo passo</span>
+          <strong><?= htmlspecialchars($nextStep['title'], ENT_QUOTES, 'UTF-8') ?></strong>
+          <a class="btn btn-primary btn-sm" href="<?= htmlspecialchars($nextStep['url'], ENT_QUOTES, 'UTF-8') ?>">
+            Continuar
+            <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
+          </a>
+        </div>
+
+        <div class="hf-onboarding-steps">
+          <?php foreach ($onboardingCard['steps'] as $step): ?>
+            <?php
+              $isDone = !empty($step['done']);
+              $isNext = !$isDone && $step['key'] === $nextStep['key'];
+              $stepClass = 'hf-onboarding-step'
+                . ($isDone ? ' is-done' : '')
+                . ($isNext ? ' is-next' : '');
+            ?>
+            <?php if ($isDone): ?>
+              <div class="<?= $stepClass ?>">
+            <?php else: ?>
+              <a class="<?= $stepClass ?>" href="<?= htmlspecialchars($step['url'], ENT_QUOTES, 'UTF-8') ?>">
+            <?php endif; ?>
+                <span class="hf-onboarding-step-icon">
+                  <i class="bi <?= $isDone ? 'bi-check-lg' : htmlspecialchars($step['icon'], ENT_QUOTES, 'UTF-8') ?>" aria-hidden="true"></i>
+                </span>
+                <span class="hf-onboarding-step-copy">
+                  <strong><?= htmlspecialchars($step['title'], ENT_QUOTES, 'UTF-8') ?></strong>
+                  <small><?= htmlspecialchars($step['text'], ENT_QUOTES, 'UTF-8') ?></small>
+                </span>
+            <?php if ($isDone): ?>
+              </div>
+            <?php else: ?>
+              </a>
+            <?php endif; ?>
+          <?php endforeach; ?>
+        </div>
+      </section>
+    <?php endif; ?>
 
     <div class="hf-section-heading">
       <div>
@@ -892,6 +1065,218 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
   box-shadow: 0 8px 18px rgba(var(--bs-primary-rgb), .16);
 }
 
+.hf-onboarding-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 280px);
+  gap: 1rem;
+  margin: .35rem 0 1.2rem;
+  padding: 1rem;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 1.15rem;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(var(--bs-primary-rgb), .14), transparent 22rem),
+    linear-gradient(135deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+  box-shadow: 0 18px 46px rgba(15, 23, 42, .10);
+}
+
+.hf-onboarding-card.is-hidden {
+  display: none;
+}
+
+.hf-onboarding-main {
+  min-width: 0;
+}
+
+.hf-onboarding-head,
+.hf-onboarding-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.hf-onboarding-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+  color: rgba(var(--bs-primary-rgb), .92);
+  font-size: .74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.hf-onboarding-minimize {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, .26);
+  border-radius: 999px;
+  color: #64748b;
+  background: rgba(255,255,255,.72);
+}
+
+.hf-onboarding-minimize:hover {
+  color: #0f172a;
+  background: #fff;
+}
+
+.hf-onboarding-title-row {
+  margin-top: .55rem;
+}
+
+.hf-onboarding-title-row h5 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.hf-onboarding-title-row p {
+  margin: .18rem 0 0;
+  color: #64748b;
+  font-size: .92rem;
+}
+
+.hf-onboarding-progress-number {
+  color: #0f172a;
+  font-size: 1.45rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.hf-onboarding-progress {
+  height: 8px;
+  margin-top: .9rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, .18);
+}
+
+.hf-onboarding-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--bs-primary), #16a34a);
+}
+
+.hf-onboarding-summary {
+  margin-top: .65rem;
+  color: #64748b;
+  font-size: .9rem;
+}
+
+.hf-onboarding-summary strong {
+  color: #0f172a;
+}
+
+.hf-onboarding-next {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: .5rem;
+  padding: .95rem;
+  border: 1px solid rgba(var(--bs-primary-rgb), .18);
+  border-radius: .95rem;
+  background: rgba(255,255,255,.76);
+}
+
+.hf-onboarding-next span {
+  color: #64748b;
+  font-size: .72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.hf-onboarding-next strong {
+  color: #0f172a;
+  font-size: .98rem;
+  font-weight: 900;
+}
+
+.hf-onboarding-next .btn {
+  align-self: flex-start;
+  border-radius: .75rem;
+  font-weight: 850;
+}
+
+.hf-onboarding-steps {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+.hf-onboarding-step {
+  min-width: 0;
+  display: flex;
+  gap: .65rem;
+  padding: .82rem;
+  border: 1px solid rgba(148, 163, 184, .20);
+  border-radius: .95rem;
+  color: inherit;
+  text-decoration: none;
+  background: rgba(255,255,255,.76);
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+a.hf-onboarding-step:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--bs-primary-rgb), .34);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .09);
+}
+
+.hf-onboarding-step.is-next {
+  border-color: rgba(var(--bs-primary-rgb), .42);
+  background: rgba(var(--bs-primary-rgb), .07);
+}
+
+.hf-onboarding-step.is-done {
+  background: rgba(22, 163, 74, .08);
+}
+
+.hf-onboarding-step-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: .85rem;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .11);
+}
+
+.hf-onboarding-step.is-done .hf-onboarding-step-icon {
+  color: #16a34a;
+  background: rgba(22, 163, 74, .13);
+}
+
+.hf-onboarding-step-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .12rem;
+}
+
+.hf-onboarding-step-copy strong {
+  color: #0f172a;
+  font-size: .86rem;
+  font-weight: 850;
+  line-height: 1.18;
+}
+
+.hf-onboarding-step-copy small {
+  color: #64748b;
+  font-size: .75rem;
+  line-height: 1.25;
+}
+
 .hf-section-heading {
   display: flex;
   justify-content: space-between;
@@ -1050,6 +1435,14 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
   .hf-dashboard-filter {
     width: 100%;
   }
+
+  .hf-onboarding-card {
+    grid-template-columns: 1fr;
+  }
+
+  .hf-onboarding-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 767.98px) {
@@ -1076,6 +1469,27 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
     width: 100%;
   }
 
+  .hf-onboarding-card {
+    padding: .85rem;
+    border-radius: 1rem;
+  }
+
+  .hf-onboarding-title-row {
+    align-items: flex-start;
+  }
+
+  .hf-onboarding-progress-number {
+    font-size: 1.15rem;
+  }
+
+  .hf-onboarding-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .hf-onboarding-next .btn {
+    width: 100%;
+  }
+
   .hf-dashboard-kpi {
     min-height: auto;
   }
@@ -1097,6 +1511,7 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
 
 [data-bs-theme="dark"] .hf-dashboard-filter,
 [data-bs-theme="dark"] .hf-dashboard-kpi,
+[data-bs-theme="dark"] .hf-onboarding-card,
 [data-bs-theme="dark"] .hf-dashboard-chart-card {
   background: rgba(17, 24, 39, .9);
   border-color: rgba(148, 163, 184, .18);
@@ -1104,6 +1519,11 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
 
 [data-bs-theme="dark"] .hf-section-heading h5,
 [data-bs-theme="dark"] .hf-dashboard-kpi .kpi-value,
+[data-bs-theme="dark"] .hf-onboarding-title-row h5,
+[data-bs-theme="dark"] .hf-onboarding-progress-number,
+[data-bs-theme="dark"] .hf-onboarding-summary strong,
+[data-bs-theme="dark"] .hf-onboarding-next strong,
+[data-bs-theme="dark"] .hf-onboarding-step-copy strong,
 [data-bs-theme="dark"] .hf-chart-head h6 {
   color: #e5e7eb;
 }
@@ -1113,7 +1533,41 @@ $urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' 
   background-color: rgba(15, 23, 42, .9);
   border-color: rgba(148, 163, 184, .24);
 }
+
+[data-bs-theme="dark"] .hf-onboarding-next,
+[data-bs-theme="dark"] .hf-onboarding-step {
+  background: rgba(15, 23, 42, .62);
+  border-color: rgba(148, 163, 184, .18);
+}
 </style>
+
+<?php if ($onboardingCard): ?>
+<script>
+(function(){
+  var card = document.querySelector('[data-onboarding-card]');
+  if (!card) return;
+
+  var key = card.getAttribute('data-storage-key');
+  if (!key) return;
+
+  try {
+    if (localStorage.getItem(key) === '1') {
+      card.classList.add('is-hidden');
+    }
+  } catch (e) {}
+
+  var btn = card.querySelector('[data-onboarding-minimize]');
+  if (!btn) return;
+
+  btn.addEventListener('click', function(){
+    try {
+      localStorage.setItem(key, '1');
+    } catch (e) {}
+    card.classList.add('is-hidden');
+  });
+})();
+</script>
+<?php endif; ?>
 
 <?php include __DIR__.'/_layout_end.php'; ?>
 

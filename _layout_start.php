@@ -143,6 +143,39 @@ if (function_exists('isAdminLoja') && isAdminLoja()) {
 } elseif (function_exists('isVisualizador') && isVisualizador()) {
   $userRole = 'Visualizador';
 }
+
+$trialBanner = null;
+$trialWhatsappUrl = 'https://wa.me/5500000000000?text=Quero%20falar%20sobre%20meu%20teste%20gratis%20do%20HelpDesk%20Facil';
+
+if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
+  try {
+    $stmtTrial = $pdo->prepare("
+      SELECT
+        ts.status,
+        ts.trial_end_at,
+        p.name AS plan_name,
+        GREATEST(DATEDIFF(ts.trial_end_at, NOW()), 0) AS days_left
+      FROM tenant_subscriptions ts
+      JOIN plans p ON p.id = ts.plan_id
+      WHERE ts.tenant_id = :tid
+      ORDER BY ts.id DESC
+      LIMIT 1
+    ");
+    $stmtTrial->execute([':tid' => $tid]);
+
+    if ($subscription = $stmtTrial->fetch(PDO::FETCH_ASSOC)) {
+      if (($subscription['status'] ?? '') === 'trial') {
+        $trialBanner = [
+          'plan_name' => trim((string)($subscription['plan_name'] ?? '')),
+          'days_left' => (int)($subscription['days_left'] ?? 0),
+          'trial_end_at' => $subscription['trial_end_at'] ?? null,
+        ];
+      }
+    }
+  } catch (Exception $e) {
+    error_log('_layout_start.php trial banner: '.$e->getMessage());
+  }
+}
 ?>
 <!doctype html>
 <html lang="pt-br" data-bs-theme="<?= $brand['mode']==='dark'?'dark':'light' ?>">
@@ -410,6 +443,59 @@ if (function_exists('isAdminLoja') && isAdminLoja()) {
   padding:1.5rem 1.5rem 2rem;
 }
 
+.hf-trial-banner{
+  padding:.85rem 1.5rem;
+  background:
+    linear-gradient(90deg, rgba(var(--bs-primary-rgb), .10), rgba(16,185,129,.10)),
+    #fff;
+  border-bottom:1px solid rgba(148,163,184,.22);
+}
+
+.hf-trial-banner-inner{
+  max-width:1320px;
+  margin:0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:1rem;
+  color:#0f172a;
+}
+
+.hf-trial-banner-copy{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:.75rem;
+  font-size:.92rem;
+  font-weight:650;
+}
+
+.hf-trial-banner-icon{
+  width:34px;
+  height:34px;
+  flex:0 0 34px;
+  display:grid;
+  place-items:center;
+  border-radius:.85rem;
+  color:var(--bs-primary);
+  background:rgba(var(--bs-primary-rgb), .12);
+}
+
+.hf-trial-banner-copy strong{
+  font-weight:850;
+}
+
+.hf-trial-banner-copy > span:not(.hf-trial-banner-icon){
+  color:#475569;
+}
+
+.hf-trial-banner-action{
+  flex:0 0 auto;
+  border-radius:999px;
+  font-size:.82rem;
+  font-weight:800;
+}
+
 @media (max-width: 991.98px){
   .hf-topbar-inner{
     gap:.6rem;
@@ -481,6 +567,22 @@ if (function_exists('isAdminLoja') && isAdminLoja()) {
 
   .hf-content{
     padding:1rem 1rem 1.5rem;
+  }
+}
+
+@media (max-width: 767.98px){
+  .hf-trial-banner{
+    padding:.8rem 1rem;
+  }
+
+  .hf-trial-banner-inner{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:.7rem;
+  }
+
+  .hf-trial-banner-action{
+    width:100%;
   }
 }
 
@@ -571,6 +673,33 @@ if (function_exists('isAdminLoja') && isAdminLoja()) {
     </div>
   </div>
 </nav>
+
+<?php if ($trialBanner): ?>
+  <?php
+    $trialPlanName = $trialBanner['plan_name'] !== '' ? $trialBanner['plan_name'] : 'seu plano';
+    $trialDaysLeft = (int)$trialBanner['days_left'];
+    $trialDaysText = $trialDaysLeft === 1 ? '1 dia' : $trialDaysLeft.' dias';
+  ?>
+  <div class="hf-trial-banner" role="status" aria-live="polite">
+    <div class="hf-trial-banner-inner">
+      <div class="hf-trial-banner-copy">
+        <span class="hf-trial-banner-icon">
+          <i class="bi bi-stars" aria-hidden="true"></i>
+        </span>
+        <span>
+          Voc&ecirc; est&aacute; utilizando o per&iacute;odo de teste do plano
+          <strong><?= htmlspecialchars($trialPlanName, ENT_QUOTES, 'UTF-8') ?></strong>.
+          Restam <strong><?= htmlspecialchars($trialDaysText, ENT_QUOTES, 'UTF-8') ?></strong>.
+        </span>
+      </div>
+
+      <a class="btn btn-sm btn-outline-primary hf-trial-banner-action" href="<?= htmlspecialchars($trialWhatsappUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener">
+        <i class="bi bi-whatsapp me-1" aria-hidden="true"></i>
+        Falar no WhatsApp
+      </a>
+    </div>
+  </div>
+<?php endif; ?>
 
 <div id="hf-backdrop" class="hf-backdrop"
      onclick="document.body.classList.remove('sidebar-open')"></div>
