@@ -3,33 +3,24 @@ require_once __DIR__.'/auth.php';
 requireLogin();
 
 require_once __DIR__.'/db.php';
+require_once __DIR__.'/_plan_usage.php';
 
 $pdo = db();
 
-// ===== PERFIL DO USUÁRIO (para restringir financeiro) =====
 $roles = $_SESSION['ROLES'] ?? [];
-// Atendente "puro": tem ATENDENTE e NÃO tem TENANT_ADMIN nem SYS_ADMIN
 $isAtendenteOnly = hasRole('ATENDENTE') && !hasRole('TENANT_ADMIN') && !hasRole('SYS_ADMIN');
 
-// ===== CONFIG DE ROTAS (ajuste se o nome dos arquivos for outro) =====
-$urlOsLista  = 'hf_os_lista.php';
-$urlFinLista = 'financeiro_os_lista.php';
-
-// ===== Tenant (multi-empresa / por empresa) =====
 $tid = function_exists('tenantId')
     ? (int) tenantId()
     : (int) ($_SESSION['tenant_id'] ?? 0);
 
-// ===== Período do dashboard =====
-$hoje        = date('Y-m-d');
+$hoje = date('Y-m-d');
 $primeiroMes = date('Y-m-01');
 
-$preset = isset($_GET['preset']) ? $_GET['preset'] : '';
+$preset = isset($_GET['preset']) ? (string)$_GET['preset'] : '';
+$data_ini = isset($_GET['data_ini']) && $_GET['data_ini'] !== '' ? (string)$_GET['data_ini'] : $primeiroMes;
+$data_fim = isset($_GET['data_fim']) && $_GET['data_fim'] !== '' ? (string)$_GET['data_fim'] : $hoje;
 
-$data_ini = isset($_GET['data_ini']) && $_GET['data_ini'] !== '' ? $_GET['data_ini'] : $primeiroMes;
-$data_fim = isset($_GET['data_fim']) && $_GET['data_fim'] !== '' ? $_GET['data_fim'] : $hoje;
-
-// Aplica presets rápidos
 switch ($preset) {
     case 'hoje':
         $data_ini = $hoje;
@@ -49,458 +40,336 @@ switch ($preset) {
         break;
 }
 
-// Normaliza datas
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_ini)) {
+    $data_ini = $primeiroMes;
+}
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_fim)) {
+    $data_fim = $hoje;
+}
 if ($data_ini > $data_fim) {
-    $tmp      = $data_ini;
+    $tmp = $data_ini;
     $data_ini = $data_fim;
     $data_fim = $tmp;
 }
 
-// ===== Filtro por técnico =====
-$tecnico_id = isset($_GET['tecnico']) ? (int) $_GET['tecnico'] : 0;
+$periodStart = $data_ini.' 00:00:00';
+$periodEnd = date('Y-m-d 00:00:00', strtotime($data_fim.' +1 day'));
 
-// ================= FUNÇÕES AUXILIARES =================
+if (!function_exists('pickColumnForTable')) {
+    function pickColumnForTable(PDO $pdo, $table, array $candidates) {
+        if (empty($candidates)) return null;
 
-function pickColumnForTable(PDO $pdo, $table, array $candidates) {
-    if (empty($candidates)) return null;
+        $in = implode("','", array_map('strval', $candidates));
+        $sql = "
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table
+              AND COLUMN_NAME IN ('{$in}')
+            LIMIT 1
+        ";
 
-    $in = implode("','", array_map('strval', $candidates));
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':table' => $table]);
+        $col = $stmt->fetchColumn();
 
-    $sql = "
-        SELECT COLUMN_NAME
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME   = :table
-          AND COLUMN_NAME IN ('{$in}')
-        LIMIT 1
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([':table' => $table]);
-    $col  = $stmt->fetchColumn();
-
-    return $col ?: null;
-}
-
-function calc_change($current, $previous) {
-    if ($previous <= 0) return null;
-    $change = (($current - $previous) / $previous) * 100;
-    return round($change, 1);
-}
-
-function money_br($v) {
-    return 'R$ ' . number_format((float)$v, 2, ',', '.');
-}
-
-// =================== BLOCO OS (hf_os) ===================
-
-$tableOs = 'hf_os';
-
-$colDataAbertura   = pickColumnForTable($pdo, $tableOs, ['data_abertura', 'data_os', 'dt_abertura', 'created_at', 'data_criacao']);
-$colDataFechamento = pickColumnForTable($pdo, $tableOs, ['data_fechamento', 'dt_fechamento', 'closed_at', 'data_conclusao', 'data_encerramento']);
-$colStatus         = pickColumnForTable($pdo, $tableOs, ['status', 'situacao', 'status_os', 'situacao_os']);
-$colTenantOs       = pickColumnForTable($pdo, $tableOs, ['tenant_id', 'id_tenant', 'empresa_id']);
-$colTecnicoOs      = pickColumnForTable($pdo, $tableOs, ['tecnico_id','id_tecnico','tecnico','responsavel_id','user_id','usuario_id']);
-
-$whereBaseOs  = " FROM {$tableOs} WHERE 1=1 ";
-$paramsBaseOs = [];
-
-if ($colTenantOs && $tid > 0) {
-    $whereBaseOs            .= " AND `{$colTenantOs}` = :tid ";
-    $paramsBaseOs[':tid']    = $tid;
-}
-
-$usaPeriodoOs = false;
-if ($colDataAbertura) {
-    $whereBaseOs            .= " AND `{$colDataAbertura}` BETWEEN :ini AND :fim ";
-    $paramsBaseOs[':ini']    = $data_ini;
-    $paramsBaseOs[':fim']    = $data_fim;
-    $usaPeriodoOs            = true;
-}
-
-if ($colTecnicoOs && $tecnico_id > 0) {
-    $whereBaseOs               .= " AND `{$colTecnicoOs}` = :tec ";
-    $paramsBaseOs[':tec']       = $tecnico_id;
-}
-
-// === Lista de técnicos para o filtro (vêm de users) ===
-$tecnicos = [];
-$colUserName = pickColumnForTable($pdo, 'users', ['name','nome','full_name']);
-if ($colTecnicoOs && $colUserName) {
-    $sqlTec = "
-        SELECT DISTINCT u.id, u.`{$colUserName}` AS nome
-        FROM {$tableOs} o
-        JOIN users u ON o.`{$colTecnicoOs}` = u.id
-        WHERE 1=1
-    ";
-    $paramsTec = [];
-    if ($colTenantOs && $tid > 0) {
-        $sqlTec          .= " AND o.`{$colTenantOs}` = :tid ";
-        $paramsTec[':tid'] = $tid;
-    }
-    $sqlTec .= " ORDER BY nome ";
-
-    $stmt = $pdo->prepare($sqlTec);
-    $stmt->execute($paramsTec);
-    $tecnicos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
-// Total OS
-$sqlTotalOs = "SELECT COUNT(*) " . $whereBaseOs;
-$stmt = $pdo->prepare($sqlTotalOs);
-$stmt->execute($paramsBaseOs);
-$total_os = (int) $stmt->fetchColumn();
-
-// Pendentes
-$pendentes = 0;
-if ($colStatus) {
-    $statusPendentes = ['aberta','em_andamento','aguardando_aprovacao','aguardando_peca','pendente'];
-
-    $placeholders = [];
-    $paramsPend   = $paramsBaseOs;
-    foreach ($statusPendentes as $idx => $st) {
-        $key = ":st_pend_{$idx}";
-        $placeholders[]    = $key;
-        $paramsPend[$key]  = $st;
-    }
-
-    $sqlPend = "SELECT COUNT(*) " . $whereBaseOs . " AND `{$colStatus}` IN (" . implode(',', $placeholders) . ")";
-    $stmt = $pdo->prepare($sqlPend);
-    $stmt->execute($paramsPend);
-    $pendentes = (int) $stmt->fetchColumn();
-}
-
-// Concluídas
-$concluidas = 0;
-if ($colStatus) {
-    $statusConcluidas = ['concluida','finalizada','entregue','fechada'];
-
-    $placeholders = [];
-    $paramsConc   = $paramsBaseOs;
-    foreach ($statusConcluidas as $idx => $st) {
-        $key = ":st_conc_{$idx}";
-        $placeholders[]    = $key;
-        $paramsConc[$key]  = $st;
-    }
-
-    $sqlConc = "SELECT COUNT(*) " . $whereBaseOs . " AND `{$colStatus}` IN (" . implode(',', $placeholders) . ")";
-    $stmt = $pdo->prepare($sqlConc);
-    $stmt->execute($paramsConc);
-    $concluidas = (int) $stmt->fetchColumn();
-}
-
-// SLA médio
-$sla_medio = 0.0;
-if ($colDataAbertura && $colDataFechamento && $colStatus) {
-    $sqlSla = "
-        SELECT AVG(DATEDIFF(
-            COALESCE(`{$colDataFechamento}`, :hoje),
-            `{$colDataAbertura}`
-        )) " . $whereBaseOs . "
-          AND `{$colStatus}` IN ('concluida','finalizada','entregue','fechada')
-    ";
-
-    $paramsSla = $paramsBaseOs;
-    $paramsSla[':hoje'] = $hoje;
-
-    $stmt = $pdo->prepare($sqlSla);
-    $stmt->execute($paramsSla);
-    $val = $stmt->fetchColumn();
-
-    if ($val !== null) {
-        $sla_medio = (float) $val;
+        return $col ?: null;
     }
 }
 
-// Período anterior (para comparação)
-$total_os_prev   = null;
-$pendentes_prev  = null;
-$concluidas_prev = null;
-
-if ($usaPeriodoOs && $colDataAbertura) {
-    $dias = (int) round((strtotime($data_fim) - strtotime($data_ini)) / 86400);
-    if ($dias < 0) $dias = 0;
-
-    $prev_fim = date('Y-m-d', strtotime($data_ini . ' -1 day'));
-    $prev_ini = date('Y-m-d', strtotime($prev_fim . ' -' . $dias . ' day'));
-
-    $wherePrevOs  = " FROM {$tableOs} WHERE 1=1 ";
-    $paramsPrevOs = [];
-
-    if ($colTenantOs && $tid > 0) {
-        $wherePrevOs             .= " AND `{$colTenantOs}` = :tid ";
-        $paramsPrevOs[':tid']     = $tid;
-    }
-
-    $wherePrevOs              .= " AND `{$colDataAbertura}` BETWEEN :ini AND :fim ";
-    $paramsPrevOs[':ini']      = $prev_ini;
-    $paramsPrevOs[':fim']      = $prev_fim;
-
-    if ($colTecnicoOs && $tecnico_id > 0) {
-        $wherePrevOs               .= " AND `{$colTecnicoOs}` = :tec ";
-        $paramsPrevOs[':tec']       = $tecnico_id;
-    }
-
-    // total anterior
-    $sqlTotalPrev = "SELECT COUNT(*) " . $wherePrevOs;
-    $stmt = $pdo->prepare($sqlTotalPrev);
-    $stmt->execute($paramsPrevOs);
-    $total_os_prev = (int) $stmt->fetchColumn();
-
-    if ($colStatus) {
-        // pendentes anterior
-        $statusPendentes = ['aberta','em_andamento','aguardando_aprovacao','aguardando_peca','pendente'];
-        $placeholders = [];
-        $paramsPendPrev = $paramsPrevOs;
-        foreach ($statusPendentes as $idx => $st) {
-            $key = ":st_pend_prev_{$idx}";
-            $placeholders[]          = $key;
-            $paramsPendPrev[$key]    = $st;
-        }
-        $sqlPendPrev = "SELECT COUNT(*) " . $wherePrevOs . " AND `{$colStatus}` IN (" . implode(',', $placeholders) . ")";
-        $stmt = $pdo->prepare($sqlPendPrev);
-        $stmt->execute($paramsPendPrev);
-        $pendentes_prev = (int) $stmt->fetchColumn();
-
-        // concluídas anterior
-        $statusConcluidas = ['concluida','finalizada','entregue','fechada'];
-        $placeholders = [];
-        $paramsConcPrev = $paramsPrevOs;
-        foreach ($statusConcluidas as $idx => $st) {
-            $key = ":st_conc_prev_{$idx}";
-            $placeholders[]          = $key;
-            $paramsConcPrev[$key]    = $st;
-        }
-        $sqlConcPrev = "SELECT COUNT(*) " . $wherePrevOs . " AND `{$colStatus}` IN (" . implode(',', $placeholders) . ")";
-        $stmt = $pdo->prepare($sqlConcPrev);
-        $stmt->execute($paramsConcPrev);
-        $concluidas_prev = (int) $stmt->fetchColumn();
+if (!function_exists('hfDashMoney')) {
+    function hfDashMoney($value) {
+        return 'R$ '.number_format((float)$value, 2, ',', '.');
     }
 }
 
-// Percentuais OS
-$perc_pendentes  = ($total_os > 0) ? round(($pendentes  / max($total_os, 1)) * 100) : 0;
-$perc_concluidas = ($total_os > 0) ? round(($concluidas / max($total_os, 1)) * 100) : 0;
-
-$meta_sla      = 3.0;
-$perc_sla      = $sla_medio > 0 ? min(100, round(($sla_medio / $meta_sla) * 100)) : 0;
-$sla_formatado = $sla_medio > 0 ? number_format($sla_medio, 1, ',', '.') . 'd' : '--';
-
-// Variação vs período anterior
-$var_total_os   = ($total_os_prev   !== null) ? calc_change($total_os,   $total_os_prev)   : null;
-$var_pendentes  = ($pendentes_prev  !== null) ? calc_change($pendentes,  $pendentes_prev)  : null;
-$var_concluidas = ($concluidas_prev !== null) ? calc_change($concluidas, $concluidas_prev) : null;
-
-// =================== BLOCO FINANCEIRO (os_financeiro) ===================
-// Só carrega se NÃO for atendente-only
-$tableFin        = 'os_financeiro';
-$colFinTenant    = null;
-$colFinValor     = null;
-$colFinVenc      = null;
-$colFinPagto     = null;
-$colFinStatus    = null;
-$total_previsto  = 0.0;
-$total_recebido  = 0.0;
-$total_em_aberto = 0.0;
-$total_atrasado  = 0.0;
-$perc_recebido   = 0;
-$labelsJs        = [];
-$osJs            = [];
-$recJs           = [];
-
-if (!$isAtendenteOnly) {
-
-    $colFinTenant = pickColumnForTable($pdo, $tableFin, ['tenant_id', 'id_tenant', 'empresa_id']);
-    $colFinValor  = pickColumnForTable($pdo, $tableFin, ['valor', 'valor_total', 'valor_bruto', 'vl_titulo']);
-    $colFinVenc   = pickColumnForTable($pdo, $tableFin, ['data_vencimento', 'dt_vencimento', 'vencimento', 'dt_vencto']);
-    $colFinPagto  = pickColumnForTable($pdo, $tableFin, ['data_pagamento', 'dt_pagamento', 'pagamento', 'dt_pgto']);
-    $colFinStatus = pickColumnForTable($pdo, $tableFin, ['status', 'situacao', 'status_titulo']);
-
-    if ($colFinValor && $colFinVenc) {
-        $whereFin  = " FROM {$tableFin} WHERE 1=1 ";
-        $paramsFin = [];
-
-        if ($colFinTenant && $tid > 0) {
-            $whereFin             .= " AND `{$colFinTenant}` = :tid ";
-            $paramsFin[':tid']     = $tid;
-        }
-
-        // Período do financeiro baseado no vencimento
-        $whereFin              .= " AND `{$colFinVenc}` BETWEEN :ini AND :fim ";
-        $paramsFin[':ini']      = $data_ini;
-        $paramsFin[':fim']      = $data_fim;
-
-        // Total previsto no período
-        $sqlPrev = "SELECT SUM(`{$colFinValor}`) " . $whereFin;
-        $stmt = $pdo->prepare($sqlPrev);
-        $stmt->execute($paramsFin);
-        $total_previsto = (float) ($stmt->fetchColumn() ?: 0);
-
-        // Total recebido (data_pagamento no período)
-        if ($colFinPagto) {
-            $whereFinRec  = " FROM {$tableFin} WHERE 1=1 ";
-            $paramsFinRec = [];
-
-            if ($colFinTenant && $tid > 0) {
-                $whereFinRec              .= " AND `{$colFinTenant}` = :tid ";
-                $paramsFinRec[':tid']      = $tid;
-            }
-
-            $whereFinRec               .= " AND `{$colFinPagto}` BETWEEN :ini AND :fim ";
-            $paramsFinRec[':ini']       = $data_ini;
-            $paramsFinRec[':fim']       = $data_fim;
-
-            if ($colFinStatus) {
-                $whereFinRec .= " AND `{$colFinStatus}` IN ('pago','liquidado','baixado') ";
-            }
-
-            $sqlRec = "SELECT SUM(`{$colFinValor}`) " . $whereFinRec;
-            $stmt = $pdo->prepare($sqlRec);
-            $stmt->execute($paramsFinRec);
-            $total_recebido = (float) ($stmt->fetchColumn() ?: 0);
-        }
-
-        // Em aberto
-        $whereFinAberto  = $whereFin;
-        $whereFinAberto .= " AND (`{$colFinPagto}` IS NULL ";
-        if ($colFinStatus) {
-            $whereFinAberto .= " OR `{$colFinStatus}` NOT IN ('pago','liquidado','baixado')";
-        }
-        $whereFinAberto .= ")";
-
-        $sqlAberto = "SELECT SUM(`{$colFinValor}`) " . $whereFinAberto;
-        $stmt = $pdo->prepare($sqlAberto);
-        $stmt->execute($paramsFin);
-        $total_em_aberto = (float) ($stmt->fetchColumn() ?: 0);
-
-        // Atrasado
-        $whereFinAtraso  = " FROM {$tableFin} WHERE 1=1 ";
-        $paramsFinAtr    = [];
-
-        if ($colFinTenant && $tid > 0) {
-            $whereFinAtraso            .= " AND `{$colFinTenant}` = :tid ";
-            $paramsFinAtr[':tid']       = $tid;
-        }
-
-        $whereFinAtraso              .= " AND `{$colFinVenc}` < :hoje ";
-        $paramsFinAtr[':hoje']        = $hoje;
-
-        $whereFinAtraso .= " AND (`{$colFinPagto}` IS NULL ";
-        if ($colFinStatus) {
-            $whereFinAtraso .= " OR `{$colFinStatus}` NOT IN ('pago','liquidado','baixado')";
-        }
-        $whereFinAtraso .= ")";
-
-        $sqlAtr = "SELECT SUM(`{$colFinValor}`) " . $whereFinAtraso;
-        $stmt = $pdo->prepare($sqlAtr);
-        $stmt->execute($paramsFinAtr);
-        $total_atrasado = (float) ($stmt->fetchColumn() ?: 0);
-
-        // % recebido
-        if ($total_previsto > 0) {
-            $perc_recebido = round(($total_recebido / $total_previsto) * 100);
-        }
+if (!function_exists('hfDashCount')) {
+    function hfDashCount(PDO $pdo, $sql, array $params = []) {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return (int)$stmt->fetchColumn();
     }
-
-    // ======= Dados para gráfico OS x Recebido =======
-    $labels      = [];
-    $osPorDia    = [];
-    $recPorDia   = [];
-
-    $iniTime = strtotime($data_ini);
-    $fimTime = strtotime($data_fim);
-
-    if ($iniTime && $fimTime && $iniTime <= $fimTime) {
-        for ($t = $iniTime; $t <= $fimTime; $t += 86400) {
-            $dia = date('Y-m-d', $t);
-            $labels[]    = $dia;
-            $osPorDia[$dia]  = 0;
-            $recPorDia[$dia] = 0.0;
-        }
-    }
-
-    // OS por dia (data de abertura)
-    if ($colDataAbertura) {
-        $whereGrafOs  = " FROM {$tableOs} WHERE 1=1 ";
-        $paramsGrafOs = [];
-
-        if ($colTenantOs && $tid > 0) {
-            $whereGrafOs             .= " AND `{$colTenantOs}` = :tid ";
-            $paramsGrafOs[':tid']     = $tid;
-        }
-        $whereGrafOs              .= " AND `{$colDataAbertura}` BETWEEN :ini AND :fim ";
-        $paramsGrafOs[':ini']      = $data_ini;
-        $paramsGrafOs[':fim']      = $data_fim;
-
-        if ($colTecnicoOs && $tecnico_id > 0) {
-            $whereGrafOs               .= " AND `{$colTecnicoOs}` = :tec ";
-            $paramsGrafOs[':tec']       = $tecnico_id;
-        }
-
-        $sqlGrafOs = "SELECT DATE(`{$colDataAbertura}`) AS dia, COUNT(*) AS qtd " . $whereGrafOs . " GROUP BY dia ORDER BY dia";
-        $stmt = $pdo->prepare($sqlGrafOs);
-        $stmt->execute($paramsGrafOs);
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $d = $row['dia'];
-            if (isset($osPorDia[$d])) {
-                $osPorDia[$d] = (int)$row['qtd'];
-            }
-        }
-    }
-
-    // Recebido por dia (data_pagamento)
-    if ($colFinValor && $colFinPagto) {
-        $whereGrafFin  = " FROM {$tableFin} WHERE 1=1 ";
-        $paramsGrafFin = [];
-
-        if ($colFinTenant && $tid > 0) {
-            $whereGrafFin             .= " AND `{$colFinTenant}` = :tid ";
-            $paramsGrafFin[':tid']     = $tid;
-        }
-        $whereGrafFin              .= " AND `{$colFinPagto}` BETWEEN :ini AND :fim ";
-        $paramsGrafFin[':ini']      = $data_ini;
-        $paramsGrafFin[':fim']      = $data_fim;
-
-        if ($colFinStatus) {
-            $whereGrafFin .= " AND `{$colFinStatus}` IN ('pago','liquidado','baixado') ";
-        }
-
-        $sqlGrafFin = "SELECT DATE(`{$colFinPagto}`) AS dia, SUM(`{$colFinValor}`) AS total " . $whereGrafFin . " GROUP BY dia ORDER BY dia";
-        $stmt = $pdo->prepare($sqlGrafFin);
-        $stmt->execute($paramsGrafFin);
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $d = $row['dia'];
-            if (isset($recPorDia[$d])) {
-                $recPorDia[$d] = (float)$row['total'];
-            }
-        }
-    }
-
-    // Arrays finais pro JS
-    $labelsJs   = array_map(function($d){ return date('d/m', strtotime($d)); }, $labels);
-    $osJs       = array_values($osPorDia);
-    $recJs      = array_values($recPorDia);
 }
 
-// ===== URLs dos cards (mantém filtros atuais) =====
-$queryBase = [
-    'data_ini' => $data_ini,
-    'data_fim' => $data_fim,
+if (!function_exists('hfDashScalar')) {
+    function hfDashScalar(PDO $pdo, $sql, array $params = []) {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return (float)($stmt->fetchColumn() ?: 0);
+    }
+}
+
+if (!function_exists('hfDashFetchAll')) {
+    function hfDashFetchAll(PDO $pdo, $sql, array $params = []) {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
+
+$deletedOs = pickColumnForTable($pdo, 'hf_os', ['deleted_at']);
+$deletedClientes = pickColumnForTable($pdo, 'hf_clientes', ['deleted_at']);
+$osDateCol = pickColumnForTable($pdo, 'hf_os', ['data_abertura']);
+$osCreatedCol = pickColumnForTable($pdo, 'hf_os', ['created_at']);
+$osPaidCol = pickColumnForTable($pdo, 'hf_os', ['data_pagto', 'data_pagamento', 'dt_pagamento']);
+
+$osDeletedSql = $deletedOs ? " AND o.`{$deletedOs}` IS NULL" : '';
+$osDeletedPlainSql = $deletedOs ? " AND `{$deletedOs}` IS NULL" : '';
+$clientesDeletedSql = $deletedClientes ? " AND `{$deletedClientes}` IS NULL" : '';
+
+if ($osDateCol && $osCreatedCol) {
+    $osDateExpr = "COALESCE(o.`{$osDateCol}`, o.`{$osCreatedCol}`)";
+    $osDatePlainExpr = "COALESCE(`{$osDateCol}`, `{$osCreatedCol}`)";
+} elseif ($osDateCol) {
+    $osDateExpr = "o.`{$osDateCol}`";
+    $osDatePlainExpr = "`{$osDateCol}`";
+} elseif ($osCreatedCol) {
+    $osDateExpr = "o.`{$osCreatedCol}`";
+    $osDatePlainExpr = "`{$osCreatedCol}`";
+} else {
+    $osDateExpr = "NOW()";
+    $osDatePlainExpr = "NOW()";
+}
+
+$statusAbertas = ['aberta'];
+$statusAndamento = ['em_andamento'];
+$statusPendentes = ['aberta', 'em_andamento', 'aguardando_aprovacao', 'aguardando_peca', 'pendente'];
+$statusConcluidas = ['concluida', 'finalizada', 'fechada'];
+
+$metrics = [
+    'os_abertas' => 0,
+    'os_andamento' => 0,
+    'os_pendentes' => 0,
+    'os_concluidas_periodo' => 0,
+    'os_periodo' => 0,
+    'os_antigas' => 0,
+    'clientes' => 0,
+    'faturamento_periodo' => 0.0,
+    'recebido_periodo' => 0.0,
+    'saldo_aberto' => 0.0,
 ];
-if ($tecnico_id > 0) {
-    $queryBase['tecnico'] = $tecnico_id;
+$attentionOs = [];
+$attentionFinance = [];
+
+try {
+    $metrics['os_abertas'] = hfDashCount($pdo, "
+        SELECT COUNT(*)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND o.status IN ('aberta')
+    ", [':tid' => $tid]);
+
+    $metrics['os_andamento'] = hfDashCount($pdo, "
+        SELECT COUNT(*)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND o.status IN ('em_andamento')
+    ", [':tid' => $tid]);
+
+    $metrics['os_pendentes'] = hfDashCount($pdo, "
+        SELECT COUNT(*)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND o.status IN ('aberta','em_andamento','aguardando_aprovacao','aguardando_peca','pendente')
+    ", [':tid' => $tid]);
+
+    $metrics['os_concluidas_periodo'] = hfDashCount($pdo, "
+        SELECT COUNT(*)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND o.status IN ('concluida','finalizada','fechada')
+          AND {$osDateExpr} >= :ini
+          AND {$osDateExpr} < :fim
+    ", [
+        ':tid' => $tid,
+        ':ini' => $periodStart,
+        ':fim' => $periodEnd,
+    ]);
+
+    $metrics['os_periodo'] = hfDashCount($pdo, "
+        SELECT COUNT(*)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND {$osDateExpr} >= :ini
+          AND {$osDateExpr} < :fim
+    ", [
+        ':tid' => $tid,
+        ':ini' => $periodStart,
+        ':fim' => $periodEnd,
+    ]);
+
+    $metrics['os_antigas'] = hfDashCount($pdo, "
+        SELECT COUNT(*)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND o.status IN ('aberta','em_andamento','aguardando_aprovacao','aguardando_peca','pendente')
+          AND {$osDateExpr} < :limite
+    ", [
+        ':tid' => $tid,
+        ':limite' => date('Y-m-d 00:00:00', strtotime('-7 days')),
+    ]);
+
+    $metrics['clientes'] = hfDashCount($pdo, "
+        SELECT COUNT(*)
+        FROM hf_clientes
+        WHERE tenant_id = :tid
+          {$clientesDeletedSql}
+    ", [':tid' => $tid]);
+
+    $metrics['faturamento_periodo'] = hfDashScalar($pdo, "
+        SELECT COALESCE(SUM(COALESCE(o.total, 0)), 0)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND COALESCE(o.status, '') <> 'cancelada'
+          AND {$osDateExpr} >= :ini
+          AND {$osDateExpr} < :fim
+    ", [
+        ':tid' => $tid,
+        ':ini' => $periodStart,
+        ':fim' => $periodEnd,
+    ]);
+
+    if ($osPaidCol) {
+        $metrics['recebido_periodo'] = hfDashScalar($pdo, "
+            SELECT COALESCE(SUM(COALESCE(o.valor_pago, 0)), 0)
+            FROM hf_os o
+            WHERE o.tenant_id = :tid
+              {$osDeletedSql}
+              AND o.`{$osPaidCol}` >= :ini
+              AND o.`{$osPaidCol}` < :fim
+        ", [
+            ':tid' => $tid,
+            ':ini' => $periodStart,
+            ':fim' => $periodEnd,
+        ]);
+    } else {
+        $metrics['recebido_periodo'] = hfDashScalar($pdo, "
+            SELECT COALESCE(SUM(COALESCE(o.valor_pago, 0)), 0)
+            FROM hf_os o
+            WHERE o.tenant_id = :tid
+              {$osDeletedSql}
+              AND {$osDateExpr} >= :ini
+              AND {$osDateExpr} < :fim
+        ", [
+            ':tid' => $tid,
+            ':ini' => $periodStart,
+            ':fim' => $periodEnd,
+        ]);
+    }
+
+    $metrics['saldo_aberto'] = hfDashScalar($pdo, "
+        SELECT COALESCE(SUM(GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0)), 0)
+        FROM hf_os o
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND COALESCE(o.status, '') <> 'cancelada'
+          AND GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0) > 0
+    ", [':tid' => $tid]);
+
+    $attentionOs = hfDashFetchAll($pdo, "
+        SELECT
+            o.id,
+            o.numero,
+            o.status,
+            {$osDateExpr} AS data_ref,
+            COALESCE(c.nome, 'Cliente nao informado') AS cliente
+        FROM hf_os o
+        LEFT JOIN hf_clientes c
+          ON c.id = o.cliente_id
+         AND c.tenant_id = o.tenant_id
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND o.status IN ('aberta','em_andamento','aguardando_aprovacao','aguardando_peca','pendente')
+        ORDER BY data_ref ASC, o.id ASC
+        LIMIT 4
+    ", [':tid' => $tid]);
+
+    $attentionFinance = hfDashFetchAll($pdo, "
+        SELECT
+            o.id,
+            o.numero,
+            o.status_financeiro,
+            GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0) AS saldo,
+            COALESCE(c.nome, 'Cliente nao informado') AS cliente
+        FROM hf_os o
+        LEFT JOIN hf_clientes c
+          ON c.id = o.cliente_id
+         AND c.tenant_id = o.tenant_id
+        WHERE o.tenant_id = :tid
+          {$osDeletedSql}
+          AND COALESCE(o.status, '') <> 'cancelada'
+          AND GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0) > 0
+        ORDER BY {$osDateExpr} ASC, o.id ASC
+        LIMIT 4
+    ", [':tid' => $tid]);
+} catch (Exception $e) {
+    error_log('dashboard.php metricas: '.$e->getMessage());
 }
 
-$urlPendentes  = $urlOsLista . '?' . http_build_query($queryBase + ['filtro_status' => 'pendentes']);
-$urlConcluidas = $urlOsLista . '?' . http_build_query($queryBase + ['filtro_status' => 'concluidas']);
-$urlTotalOs    = $urlOsLista . '?' . http_build_query($queryBase + ['filtro_status' => 'todas']);
+$planUsageCard = null;
+if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
+    try {
+        $planUsage = hfTenantUsage($pdo, $tid);
+        $hasPlanInfo = !empty($planUsage['plan_name']) || !empty($planUsage['plan_code']) || !empty($planUsage['subscription_status']);
 
-$urlFinPrevisto  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' => 'previsto']);
-$urlFinRecebido  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' => 'recebido']);
-$urlFinAberto    = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' => 'aberto']);
-$urlFinAtrasado  = $urlFinLista . '?' . http_build_query($queryBase + ['filtro' => 'atrasado']);
+        if ($hasPlanInfo) {
+            $planName = trim((string)($planUsage['plan_name'] ?? ''));
+            if ($planName === '') {
+                $planName = trim((string)($planUsage['plan_code'] ?? 'Plano'));
+            }
 
-// ===== Onboarding inicial do tenant =====
+            $statusKey = (string)($planUsage['subscription_status'] ?? '');
+            $statusLabels = [
+                'trial' => 'Trial',
+                'ativo' => 'Ativo',
+                'vencido' => 'Vencido',
+                'bloqueado' => 'Bloqueado',
+                'cancelado' => 'Cancelado',
+            ];
+
+            $userLimit = (int)($planUsage['user_limit'] ?? 0);
+            $osLimit = (int)($planUsage['monthly_os_limit'] ?? 0);
+
+            $trialText = '';
+            if (!empty($planUsage['is_trial']) && !empty($planUsage['trial_end_at'])) {
+                $trialEndTs = strtotime((string)$planUsage['trial_end_at']);
+                if ($trialEndTs) {
+                    $today = strtotime(date('Y-m-d'));
+                    $trialEndDay = strtotime(date('Y-m-d', $trialEndTs));
+                    $daysLeft = max(0, (int)ceil(($trialEndDay - $today) / 86400));
+                    $trialText = 'Teste ate '.date('d/m/Y', $trialEndTs).' - '.($daysLeft === 1 ? '1 dia restante' : $daysLeft.' dias restantes');
+                }
+            }
+
+            $planUsageCard = [
+                'plan_name' => $planName,
+                'status' => $statusLabels[$statusKey] ?? ($statusKey !== '' ? ucfirst($statusKey) : 'Sem status'),
+                'active_users' => (int)($planUsage['active_users'] ?? 0),
+                'user_limit' => $userLimit,
+                'user_limit_label' => $userLimit > 0 ? (string)$userLimit : 'Ilimitado',
+                'users_usage_percent' => (int)($planUsage['users_usage_percent'] ?? 0),
+                'is_near_user_limit' => !empty($planUsage['is_near_user_limit']),
+                'monthly_os_count' => (int)($planUsage['monthly_os_count'] ?? 0),
+                'monthly_os_limit' => $osLimit,
+                'monthly_os_limit_label' => $osLimit > 0 ? number_format($osLimit, 0, ',', '.') : 'Ilimitado',
+                'os_usage_percent' => (int)($planUsage['os_usage_percent'] ?? 0),
+                'is_near_os_limit' => !empty($planUsage['is_near_os_limit']),
+                'is_trial' => !empty($planUsage['is_trial']),
+                'trial_text' => $trialText,
+            ];
+        }
+    } catch (Exception $e) {
+        error_log('dashboard.php plan usage card: '.$e->getMessage());
+    }
+}
+
 $onboardingCard = null;
 $showOnboarding = $tid > 0
     && function_exists('isAdminLoja')
@@ -512,12 +381,12 @@ if ($showOnboarding) {
         $colDeletedClientes = pickColumnForTable($pdo, 'hf_clientes', ['deleted_at']);
         $colDeletedProdutos = pickColumnForTable($pdo, 'hf_produtos', ['deleted_at']);
         $colDeletedServicos = pickColumnForTable($pdo, 'hf_servicos', ['deleted_at']);
-        $colDeletedOs       = pickColumnForTable($pdo, 'hf_os', ['deleted_at']);
+        $colDeletedOs = pickColumnForTable($pdo, 'hf_os', ['deleted_at']);
 
         $whereClientes = 'tenant_id = ?' . ($colDeletedClientes ? " AND `{$colDeletedClientes}` IS NULL" : '');
         $whereProdutos = 'tenant_id = ?' . ($colDeletedProdutos ? " AND `{$colDeletedProdutos}` IS NULL" : '');
         $whereServicos = 'tenant_id = ?' . ($colDeletedServicos ? " AND `{$colDeletedServicos}` IS NULL" : '');
-        $whereOs       = 'tenant_id = ?' . ($colDeletedOs ? " AND `{$colDeletedOs}` IS NULL" : '');
+        $whereOs = 'tenant_id = ?' . ($colDeletedOs ? " AND `{$colDeletedOs}` IS NULL" : '');
 
         $sqlOnboarding = "
             SELECT
@@ -535,15 +404,15 @@ if ($showOnboarding) {
             [
                 'key' => 'cliente',
                 'title' => 'Cadastrar primeiro cliente',
-                'text' => 'Crie a base para abrir atendimentos com histórico.',
+                'text' => 'Crie a base para abrir atendimentos com historico.',
                 'icon' => 'bi-people',
                 'url' => '/cliente_form.php',
                 'done' => ((int)($onboardingCounts['clientes_count'] ?? 0)) > 0,
             ],
             [
                 'key' => 'servico',
-                'title' => 'Cadastrar primeiro serviço',
-                'text' => 'Padronize mão de obra, preço e garantia.',
+                'title' => 'Cadastrar primeiro servico',
+                'text' => 'Padronize mao de obra, preco e garantia.',
                 'icon' => 'bi-tools',
                 'url' => '/servico_form.php',
                 'done' => ((int)($onboardingCounts['servicos_count'] ?? 0)) > 0,
@@ -551,7 +420,7 @@ if ($showOnboarding) {
             [
                 'key' => 'produto',
                 'title' => 'Cadastrar primeiro produto',
-                'text' => 'Organize peças, itens e valores usados nas OS.',
+                'text' => 'Organize pecas, itens e valores usados nas OS.',
                 'icon' => 'bi-box-seam',
                 'url' => '/produto_form.php',
                 'done' => ((int)($onboardingCounts['produtos_count'] ?? 0)) > 0,
@@ -559,7 +428,7 @@ if ($showOnboarding) {
             [
                 'key' => 'os',
                 'title' => 'Criar primeira OS',
-                'text' => 'Registre o primeiro atendimento da operação.',
+                'text' => 'Registre o primeiro atendimento da operacao.',
                 'icon' => 'bi-clipboard2-check',
                 'url' => '/os_form.php',
                 'done' => ((int)($onboardingCounts['os_count'] ?? 0)) > 0,
@@ -599,6 +468,7 @@ if ($showOnboarding) {
     }
 }
 
+$periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime($data_fim));
 ?>
 <?php include __DIR__.'/_layout_start.php'; ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
@@ -608,42 +478,28 @@ if ($showOnboarding) {
 
     <div class="hf-dashboard-top mb-3">
       <div class="hf-dashboard-title">
-        <div class="hf-page-kicker">Visão geral</div>
+        <div class="hf-page-kicker">Visao geral</div>
         <h4 class="mb-0">Dashboard</h4>
         <div class="hf-page-subtitle">
-          Acompanhe ordens de serviço, SLA e indicadores financeiros do período.
+          Central operacional com indicadores confiaveis do periodo.
         </div>
       </div>
 
-      <!-- Filtro de período + técnico -->
       <form class="hf-dashboard-filter" method="get">
         <div class="hf-filter-field">
           <label class="form-label mb-1 small">Data inicial</label>
-          <input type="date" name="data_ini" class="form-control form-control-sm"
-                 value="<?php echo htmlspecialchars($data_ini); ?>">
+          <input type="date" name="data_ini" class="form-control form-control-sm" value="<?= htmlspecialchars($data_ini, ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <div class="hf-filter-field">
           <label class="form-label mb-1 small">Data final</label>
-          <input type="date" name="data_fim" class="form-control form-control-sm"
-                 value="<?php echo htmlspecialchars($data_fim); ?>">
-        </div>
-        <div class="hf-filter-field">
-          <label class="form-label mb-1 small">Técnico</label>
-          <select name="tecnico" class="form-select form-select-sm">
-            <option value="0">Todos</option>
-            <?php foreach ($tecnicos as $tec): ?>
-              <option value="<?php echo (int)$tec['id']; ?>" <?php echo $tecnico_id == (int)$tec['id'] ? 'selected' : ''; ?>>
-                <?php echo htmlspecialchars($tec['nome']); ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
+          <input type="date" name="data_fim" class="form-control form-control-sm" value="<?= htmlspecialchars($data_fim, ENT_QUOTES, 'UTF-8') ?>">
         </div>
         <input type="hidden" name="preset" value="">
         <div class="hf-preset-group">
           <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="hoje">Hoje</button>
           <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="7d">7 dias</button>
-          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_atual">Mês atual</button>
-          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_anterior">Mês anterior</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_atual">Mes atual</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary btn-preset" data-preset="mes_anterior">Mes anterior</button>
         </div>
         <div>
           <button type="submit" class="btn btn-sm btn-primary hf-btn-apply">
@@ -673,7 +529,7 @@ if ($showOnboarding) {
           <div class="hf-onboarding-title-row">
             <div>
               <h5>Comece pelo essencial</h5>
-              <p>Complete estes passos para colocar sua operação para rodar.</p>
+              <p>Complete estes passos para colocar sua operacao para rodar.</p>
             </div>
             <div class="hf-onboarding-progress-number"><?= (int)$onboardingCard['progress'] ?>%</div>
           </div>
@@ -683,12 +539,12 @@ if ($showOnboarding) {
           </div>
 
           <div class="hf-onboarding-summary">
-            Você já concluiu <strong><?= (int)$onboardingCard['completed'] ?></strong> de <strong><?= (int)$onboardingCard['total'] ?></strong> etapas.
+            Voce ja concluiu <strong><?= (int)$onboardingCard['completed'] ?></strong> de <strong><?= (int)$onboardingCard['total'] ?></strong> etapas.
           </div>
         </div>
 
         <div class="hf-onboarding-next">
-          <span>Próximo passo</span>
+          <span>Proximo passo</span>
           <strong><?= htmlspecialchars($nextStep['title'], ENT_QUOTES, 'UTF-8') ?></strong>
           <a class="btn btn-primary btn-sm" href="<?= htmlspecialchars($nextStep['url'], ENT_QUOTES, 'UTF-8') ?>">
             Continuar
@@ -727,245 +583,229 @@ if ($showOnboarding) {
       </section>
     <?php endif; ?>
 
+    <?php if ($planUsageCard): ?>
+      <section class="hf-plan-usage-card">
+        <div class="hf-plan-usage-head">
+          <div>
+            <span class="hf-plan-usage-kicker">Uso do plano</span>
+            <h5><?= htmlspecialchars($planUsageCard['plan_name'], ENT_QUOTES, 'UTF-8') ?></h5>
+          </div>
+          <span class="hf-plan-status <?= $planUsageCard['is_trial'] ? 'is-trial' : '' ?>">
+            <?= htmlspecialchars($planUsageCard['status'], ENT_QUOTES, 'UTF-8') ?>
+          </span>
+        </div>
+
+        <?php if ($planUsageCard['trial_text'] !== ''): ?>
+          <div class="hf-plan-trial-note">
+            <i class="bi bi-clock-history" aria-hidden="true"></i>
+            <?= htmlspecialchars($planUsageCard['trial_text'], ENT_QUOTES, 'UTF-8') ?>
+          </div>
+        <?php endif; ?>
+
+        <div class="hf-plan-usage-grid">
+          <div class="hf-plan-meter <?= $planUsageCard['is_near_user_limit'] ? 'is-warning' : '' ?>">
+            <div class="hf-plan-meter-top">
+              <span><i class="bi bi-people" aria-hidden="true"></i> Usuarios ativos</span>
+              <strong>
+                <?= (int)$planUsageCard['active_users'] ?> /
+                <?= htmlspecialchars($planUsageCard['user_limit_label'], ENT_QUOTES, 'UTF-8') ?>
+              </strong>
+            </div>
+            <div class="hf-plan-meter-bar">
+              <span style="width: <?= (int)$planUsageCard['users_usage_percent'] ?>%"></span>
+            </div>
+            <?php if ($planUsageCard['is_near_user_limit']): ?>
+              <small>Voce esta perto do limite de usuarios do plano.</small>
+            <?php endif; ?>
+          </div>
+
+          <div class="hf-plan-meter <?= $planUsageCard['is_near_os_limit'] ? 'is-warning' : '' ?>">
+            <div class="hf-plan-meter-top">
+              <span><i class="bi bi-clipboard2-check" aria-hidden="true"></i> OS neste mes</span>
+              <strong>
+                <?= number_format((int)$planUsageCard['monthly_os_count'], 0, ',', '.') ?> /
+                <?= htmlspecialchars($planUsageCard['monthly_os_limit_label'], ENT_QUOTES, 'UTF-8') ?>
+              </strong>
+            </div>
+            <div class="hf-plan-meter-bar">
+              <span style="width: <?= (int)$planUsageCard['os_usage_percent'] ?>%"></span>
+            </div>
+            <?php if ($planUsageCard['is_near_os_limit']): ?>
+              <small>Voce esta perto do limite mensal de OS.</small>
+            <?php endif; ?>
+          </div>
+        </div>
+      </section>
+    <?php endif; ?>
+
     <div class="hf-section-heading">
       <div>
-        <h5>Ordens de Serviço</h5>
-        <p>Volume, andamento e desempenho operacional.</p>
+        <h5>Indicadores principais</h5>
+        <p>Periodo: <?= htmlspecialchars($periodLabel, ENT_QUOTES, 'UTF-8') ?></p>
       </div>
     </div>
 
-    <!-- ===== LINHA 1: OS ===== -->
     <div class="row g-3 mb-4">
-      <!-- Total OS -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-primary"
-             style="cursor:pointer"
-             onclick="window.location='<?php echo htmlspecialchars($urlTotalOs); ?>'">
+      <div class="col-12 col-md-6 col-xl-4">
+        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-primary" href="/os_list.php?status=aberta">
           <div class="kpi-top">
-            <div class="kpi-title">Total OS</div>
-            <div class="kpi-icon"><i class="bi bi-clipboard-data"></i></div>
+            <div class="kpi-title">OS abertas</div>
+            <div class="kpi-icon"><i class="bi bi-clipboard-plus"></i></div>
           </div>
-          <div class="kpi-value">
-            <?php echo number_format($total_os, 0, ',', '.'); ?>
-          </div>
-          <div class="kpi-sub">
-            <?php echo $usaPeriodoOs ? 'no período' : 'todas as OS'; ?>
-            <?php if ($var_total_os !== null): ?>
-                <span class="ms-1 small <?php echo $var_total_os >= 0 ? 'text-success' : 'text-danger'; ?>">
-                  <i class="bi bi-arrow-<?php echo $var_total_os >= 0 ? 'up' : 'down'; ?>-short"></i>
-                  <?php echo ($var_total_os >= 0 ? '+' : '').$var_total_os; ?>%
-                </span>
-            <?php endif; ?>
-          </div>
-          <div class="hf-progress">
-            <div class="bar" style="width:100%"></div>
-          </div>
-        </div>
+          <div class="kpi-value"><?= number_format($metrics['os_abertas'], 0, ',', '.') ?></div>
+          <div class="kpi-sub">Aguardando inicio ou triagem.</div>
+        </a>
       </div>
 
-      <!-- Pendentes -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-danger"
-             style="cursor:pointer"
-             onclick="window.location='<?php echo htmlspecialchars($urlPendentes); ?>'">
+      <div class="col-12 col-md-6 col-xl-4">
+        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-warning" href="/os_list.php?status=em_andamento">
           <div class="kpi-top">
-            <div class="kpi-title">Pendentes</div>
-            <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+            <div class="kpi-title">Em andamento</div>
+            <div class="kpi-icon"><i class="bi bi-tools"></i></div>
           </div>
-          <div class="kpi-value">
-            <?php echo number_format($pendentes, 0, ',', '.'); ?>
-          </div>
-          <div class="kpi-sub">
-            <?php
-            if ($total_os > 0) {
-                echo $perc_pendentes.'% das OS';
-            } else {
-                echo 'sem OS no período';
-            }
-            ?>
-            <?php if ($var_pendentes !== null): ?>
-                <span class="ms-1 small <?php echo $var_pendentes <= 0 ? 'text-success' : 'text-danger'; ?>">
-                  <i class="bi bi-arrow-<?php echo $var_pendentes <= 0 ? 'down' : 'up'; ?>-short"></i>
-                  <?php echo ($var_pendentes >= 0 ? '+' : '').$var_pendentes; ?>%
-                </span>
-            <?php endif; ?>
-          </div>
-          <div class="hf-progress">
-            <div class="bar" style="width:<?php echo $perc_pendentes; ?>%"></div>
-          </div>
-        </div>
+          <div class="kpi-value"><?= number_format($metrics['os_andamento'], 0, ',', '.') ?></div>
+          <div class="kpi-sub">Servicos em execucao no momento.</div>
+        </a>
       </div>
 
-      <!-- Concluídas -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-success"
-             style="cursor:pointer"
-             onclick="window.location='<?php echo htmlspecialchars($urlConcluidas); ?>'">
+      <div class="col-12 col-md-6 col-xl-4">
+        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-success" href="/os_list.php?status=concluida">
           <div class="kpi-top">
-            <div class="kpi-title">Concluídas</div>
+            <div class="kpi-title">Concluidas no periodo</div>
             <div class="kpi-icon"><i class="bi bi-check2-circle"></i></div>
           </div>
-          <div class="kpi-value">
-            <?php echo number_format($concluidas, 0, ',', '.'); ?>
-          </div>
-          <div class="kpi-sub">
-            <?php
-            if ($total_os > 0) {
-                echo $perc_concluidas.'% das OS';
-            } else {
-                echo 'sem OS no período';
-            }
-            ?>
-            <?php if ($var_concluidas !== null): ?>
-                <span class="ms-1 small <?php echo $var_concluidas >= 0 ? 'text-success' : 'text-danger'; ?>">
-                  <i class="bi bi-arrow-<?php echo $var_concluidas >= 0 ? 'up' : 'down'; ?>-short"></i>
-                  <?php echo ($var_concluidas >= 0 ? '+' : '').$var_concluidas; ?>%
-                </span>
-            <?php endif; ?>
-          </div>
-          <div class="hf-progress">
-            <div class="bar" style="width:<?php echo $perc_concluidas; ?>%"></div>
-          </div>
-        </div>
+          <div class="kpi-value"><?= number_format($metrics['os_concluidas_periodo'], 0, ',', '.') ?></div>
+          <div class="kpi-sub"><?= number_format($metrics['os_periodo'], 0, ',', '.') ?> OS criadas no periodo.</div>
+        </a>
       </div>
 
-      <!-- SLA -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-warning">
+      <?php if (!$isAtendenteOnly): ?>
+      <div class="col-12 col-md-6 col-xl-4">
+        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-warning" href="/financeiro_os_lista.php?status=pendente">
           <div class="kpi-top">
-            <div class="kpi-title">SLA médio</div>
-            <div class="kpi-icon"><i class="bi bi-speedometer2"></i></div>
+            <div class="kpi-title">A receber</div>
+            <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
           </div>
-          <div class="kpi-value">
-            <?php echo $sla_formatado; ?>
-          </div>
-          <div class="kpi-sub">tempo médio de atendimento</div>
-          <div class="hf-progress">
-            <div class="bar" style="width:<?php echo $perc_sla; ?>%"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <?php if (!$isAtendenteOnly): ?>
-    <div class="hf-section-heading">
-      <div>
-        <h5>Financeiro</h5>
-        <p>Previsão, recebimento e pendências financeiras.</p>
-      </div>
-    </div>
-
-    <!-- ===== LINHA 2: FINANCEIRO ===== -->
-    <div class="row g-3 mb-4">
-      <!-- Total previsto -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-primary"
-             style="cursor:pointer"
-             onclick="window.location='<?php echo htmlspecialchars($urlFinPrevisto); ?>'">
-          <div class="kpi-top">
-            <div class="kpi-title">Previsto no período</div>
-            <div class="kpi-icon"><i class="bi bi-cash-stack"></i></div>
-          </div>
-          <div class="kpi-value">
-            <?php echo money_br($total_previsto); ?>
-          </div>
-          <div class="kpi-sub">títulos com vencimento no período</div>
-          <div class="hf-progress">
-            <div class="bar" style="width:100%"></div>
-          </div>
-        </div>
+          <div class="kpi-value"><?= hfDashMoney($metrics['saldo_aberto']) ?></div>
+          <div class="kpi-sub">Saldo aberto em OS nao canceladas.</div>
+        </a>
       </div>
 
-      <!-- Recebido -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-success"
-             style="cursor:pointer"
-             onclick="window.location='<?php echo htmlspecialchars($urlFinRecebido); ?>'">
+      <div class="col-12 col-md-6 col-xl-4">
+        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-success" href="/financeiro_os_lista.php?status=pago">
           <div class="kpi-top">
             <div class="kpi-title">Recebido</div>
-            <div class="kpi-icon"><i class="bi bi-bank"></i></div>
+            <div class="kpi-icon"><i class="bi bi-cash-coin"></i></div>
           </div>
-          <div class="kpi-value">
-            <?php echo money_br($total_recebido); ?>
-          </div>
-          <div class="kpi-sub">
-            <?php
-            if ($total_previsto > 0) {
-                echo $perc_recebido.'% do previsto';
-            } else {
-                echo 'sem previsão no período';
-            }
-            ?>
-          </div>
-          <div class="hf-progress">
-            <div class="bar" style="width:<?php echo $perc_recebido; ?>%"></div>
-          </div>
-        </div>
+          <div class="kpi-value"><?= hfDashMoney($metrics['recebido_periodo']) ?></div>
+          <div class="kpi-sub"><?= hfDashMoney($metrics['faturamento_periodo']) ?> faturado no periodo.</div>
+        </a>
       </div>
+      <?php endif; ?>
 
-      <!-- Em aberto -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-warning"
-             style="cursor:pointer"
-             onclick="window.location='<?php echo htmlspecialchars($urlFinAberto); ?>'">
+      <div class="col-12 col-md-6 col-xl-4">
+        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-primary" href="/clientes.php">
           <div class="kpi-top">
-            <div class="kpi-title">Em aberto</div>
-            <div class="kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
+            <div class="kpi-title">Clientes</div>
+            <div class="kpi-icon"><i class="bi bi-people"></i></div>
           </div>
-          <div class="kpi-value">
-            <?php echo money_br($total_em_aberto); ?>
-          </div>
-          <div class="kpi-sub">a receber no período</div>
-          <div class="hf-progress">
-            <?php
-            $perc_aberto = ($total_previsto > 0) ? round(($total_em_aberto / $total_previsto) * 100) : 0;
-            ?>
-            <div class="bar" style="width:<?php echo $perc_aberto; ?>%"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Atrasado -->
-      <div class="col-12 col-md-6 col-lg-3">
-        <div class="hf-card hf-kpi hf-dashboard-kpi kpi-danger"
-             style="cursor:pointer"
-             onclick="window.location='<?php echo htmlspecialchars($urlFinAtrasado); ?>'">
-          <div class="kpi-top">
-            <div class="kpi-title">Atrasado</div>
-            <div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
-          </div>
-          <div class="kpi-value">
-            <?php echo money_br($total_atrasado); ?>
-          </div>
-          <div class="kpi-sub">vencido e não pago</div>
-          <div class="hf-progress">
-            <?php
-            $baseAtr = max($total_previsto, $total_em_aberto, 1);
-            $perc_atrasado = round(($total_atrasado / $baseAtr) * 100);
-            ?>
-            <div class="bar" style="width:<?php echo $perc_atrasado; ?>%"></div>
-          </div>
-        </div>
+          <div class="kpi-value"><?= number_format($metrics['clientes'], 0, ',', '.') ?></div>
+          <div class="kpi-sub">Base ativa de clientes cadastrados.</div>
+        </a>
       </div>
     </div>
 
-    <!-- ===== GRÁFICO OS x RECEBIDO ===== -->
-    <div class="hf-card hf-dashboard-chart-card">
-      <div class="hf-chart-head">
-        <div>
-          <h6 class="mb-0">OS x Recebido no período</h6>
-          <small class="text-muted">Comparativo diário de volume operacional e valor recebido.</small>
-        </div>
-        <small class="text-muted hf-chart-period">
-          <?php echo htmlspecialchars(date('d/m/Y', strtotime($data_ini)) . ' a ' . date('d/m/Y', strtotime($data_fim))); ?>
-          <?php if ($tecnico_id > 0): ?>
-            • Técnico filtrado
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-xl-8">
+        <section class="hf-card hf-attention-card">
+          <div class="hf-card-head">
+            <div>
+              <h5>Atenção agora</h5>
+              <p>Itens que merecem acompanhamento operacional.</p>
+            </div>
+            <?php if ($metrics['os_antigas'] > 0): ?>
+              <span class="hf-soft-alert"><?= (int)$metrics['os_antigas'] ?> OS +7 dias</span>
+            <?php endif; ?>
+          </div>
+
+          <div class="hf-attention-grid">
+            <div>
+              <h6>OS abertas há mais tempo</h6>
+              <?php if ($attentionOs): ?>
+                <div class="hf-attention-list">
+                  <?php foreach ($attentionOs as $row): ?>
+                    <?php
+                      $num = (int)($row['numero'] ?? $row['id']);
+                      $dataRef = !empty($row['data_ref']) ? date('d/m/Y', strtotime($row['data_ref'])) : '-';
+                    ?>
+                    <a class="hf-attention-item" href="/os_form.php?id=<?= (int)$row['id'] ?>">
+                      <span class="hf-attention-icon"><i class="bi bi-clipboard2"></i></span>
+                      <span>
+                        <strong>#<?= $num ?> - <?= htmlspecialchars($row['cliente'], ENT_QUOTES, 'UTF-8') ?></strong>
+                        <small><?= htmlspecialchars(ucfirst(str_replace('_', ' ', (string)$row['status'])), ENT_QUOTES, 'UTF-8') ?> desde <?= htmlspecialchars($dataRef, ENT_QUOTES, 'UTF-8') ?></small>
+                      </span>
+                    </a>
+                  <?php endforeach; ?>
+                </div>
+              <?php else: ?>
+                <div class="hf-empty-state">Nenhuma OS pendente no momento.</div>
+              <?php endif; ?>
+            </div>
+
+            <div>
+              <h6>Pendências financeiras</h6>
+              <?php if (!$isAtendenteOnly && $attentionFinance): ?>
+                <div class="hf-attention-list">
+                  <?php foreach ($attentionFinance as $row): ?>
+                    <?php $num = (int)($row['numero'] ?? $row['id']); ?>
+                    <a class="hf-attention-item" href="/os_form.php?id=<?= (int)$row['id'] ?>">
+                      <span class="hf-attention-icon is-money"><i class="bi bi-currency-dollar"></i></span>
+                      <span>
+                        <strong>#<?= $num ?> - <?= htmlspecialchars($row['cliente'], ENT_QUOTES, 'UTF-8') ?></strong>
+                        <small><?= hfDashMoney($row['saldo'] ?? 0) ?> em aberto</small>
+                      </span>
+                    </a>
+                  <?php endforeach; ?>
+                </div>
+              <?php elseif ($isAtendenteOnly): ?>
+                <div class="hf-empty-state">Financeiro restrito para este perfil.</div>
+              <?php else: ?>
+                <div class="hf-empty-state">Nenhum saldo em aberto.</div>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <?php if ($planUsageCard && ($planUsageCard['is_near_user_limit'] || $planUsageCard['is_near_os_limit'])): ?>
+            <div class="hf-plan-alert-line">
+              <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+              O uso do plano esta perto do limite. Avalie o crescimento da operacao.
+            </div>
           <?php endif; ?>
-        </small>
+        </section>
       </div>
-      <canvas id="graficoOsFin" style="max-height:320px;"></canvas>
+
+      <div class="col-12 col-xl-4">
+        <section class="hf-card hf-shortcuts-card">
+          <div class="hf-card-head">
+            <div>
+              <h5>Atalhos rápidos</h5>
+              <p>Ações frequentes para ganhar tempo.</p>
+            </div>
+          </div>
+
+          <div class="hf-shortcut-grid">
+            <a href="/os_form.php"><i class="bi bi-plus-circle"></i><span>Nova OS</span></a>
+            <a href="/cliente_form.php"><i class="bi bi-person-plus"></i><span>Novo cliente</span></a>
+            <a href="/produto_form.php"><i class="bi bi-box-seam"></i><span>Novo produto</span></a>
+            <a href="/servico_form.php"><i class="bi bi-tools"></i><span>Novo servico</span></a>
+            <a href="/relatorios.php"><i class="bi bi-bar-chart-line"></i><span>Relatorios</span></a>
+            <?php if (!$isAtendenteOnly): ?>
+              <a href="/financeiro_os_lista.php"><i class="bi bi-cash-coin"></i><span>Financeiro</span></a>
+            <?php endif; ?>
+          </div>
+        </section>
+      </div>
     </div>
-    <?php endif; // !$isAtendenteOnly ?>
 
   </div>
 </main>
@@ -1036,13 +876,6 @@ if ($showOnboarding) {
   background-color: #f8fafc;
 }
 
-.hf-dashboard-filter .form-control:focus,
-.hf-dashboard-filter .form-select:focus {
-  border-color: rgba(var(--bs-primary-rgb), .55);
-  box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
-  background-color: #fff;
-}
-
 .hf-filter-field {
   min-width: 138px;
 }
@@ -1060,9 +893,13 @@ if ($showOnboarding) {
   font-weight: 750;
 }
 
-.hf-btn-apply {
-  min-height: 34px;
-  box-shadow: 0 8px 18px rgba(var(--bs-primary-rgb), .16);
+.hf-onboarding-card,
+.hf-plan-usage-card,
+.hf-card {
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
 }
 
 .hf-onboarding-card {
@@ -1073,12 +910,9 @@ if ($showOnboarding) {
   margin: .35rem 0 1.2rem;
   padding: 1rem;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, .22);
-  border-radius: 1.15rem;
   background:
     radial-gradient(circle at 0% 0%, rgba(var(--bs-primary-rgb), .14), transparent 22rem),
     linear-gradient(135deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
-  box-shadow: 0 18px 46px rgba(15, 23, 42, .10);
 }
 
 .hf-onboarding-card.is-hidden {
@@ -1097,7 +931,8 @@ if ($showOnboarding) {
   gap: 1rem;
 }
 
-.hf-onboarding-kicker {
+.hf-onboarding-kicker,
+.hf-plan-usage-kicker {
   display: inline-flex;
   align-items: center;
   gap: .42rem;
@@ -1121,23 +956,20 @@ if ($showOnboarding) {
   background: rgba(255,255,255,.72);
 }
 
-.hf-onboarding-minimize:hover {
-  color: #0f172a;
-  background: #fff;
-}
-
 .hf-onboarding-title-row {
   margin-top: .55rem;
 }
 
-.hf-onboarding-title-row h5 {
+.hf-onboarding-title-row h5,
+.hf-card-head h5 {
   margin: 0;
   color: #0f172a;
   font-size: 1.15rem;
   font-weight: 900;
 }
 
-.hf-onboarding-title-row p {
+.hf-onboarding-title-row p,
+.hf-card-head p {
   margin: .18rem 0 0;
   color: #64748b;
   font-size: .92rem;
@@ -1150,7 +982,8 @@ if ($showOnboarding) {
   line-height: 1;
 }
 
-.hf-onboarding-progress {
+.hf-onboarding-progress,
+.hf-plan-meter-bar {
   height: 8px;
   margin-top: .9rem;
   overflow: hidden;
@@ -1158,7 +991,8 @@ if ($showOnboarding) {
   background: rgba(148, 163, 184, .18);
 }
 
-.hf-onboarding-progress span {
+.hf-onboarding-progress span,
+.hf-plan-meter-bar span {
   display: block;
   height: 100%;
   border-radius: inherit;
@@ -1223,13 +1057,6 @@ if ($showOnboarding) {
   color: inherit;
   text-decoration: none;
   background: rgba(255,255,255,.76);
-  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
-}
-
-a.hf-onboarding-step:hover {
-  transform: translateY(-1px);
-  border-color: rgba(var(--bs-primary-rgb), .34);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, .09);
 }
 
 .hf-onboarding-step.is-next {
@@ -1277,6 +1104,110 @@ a.hf-onboarding-step:hover {
   line-height: 1.25;
 }
 
+.hf-plan-usage-card {
+  display: grid;
+  grid-template-columns: minmax(220px, .8fr) minmax(340px, 1.2fr);
+  gap: 1rem;
+  align-items: stretch;
+  margin: .35rem 0 1.2rem;
+  padding: 1rem;
+}
+
+.hf-plan-usage-head {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .8rem;
+}
+
+.hf-plan-usage-head h5 {
+  margin: .2rem 0 0;
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.hf-plan-status {
+  flex: 0 0 auto;
+  padding: .32rem .62rem;
+  border-radius: 999px;
+  color: #166534;
+  background: rgba(22, 163, 74, .12);
+  font-size: .76rem;
+  font-weight: 850;
+}
+
+.hf-plan-status.is-trial {
+  color: #075985;
+  background: rgba(14, 165, 233, .13);
+}
+
+.hf-plan-trial-note {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  margin-top: -.35rem;
+  color: #475569;
+  font-size: .86rem;
+  font-weight: 650;
+}
+
+.hf-plan-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .8rem;
+}
+
+.hf-plan-meter {
+  min-width: 0;
+  padding: .85rem;
+  border: 1px solid rgba(148, 163, 184, .20);
+  border-radius: .9rem;
+  background: #f8fafc;
+}
+
+.hf-plan-meter-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .7rem;
+}
+
+.hf-plan-meter-top span {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+  color: #64748b;
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.hf-plan-meter-top strong {
+  flex: 0 0 auto;
+  color: #0f172a;
+  font-size: .92rem;
+  font-weight: 900;
+}
+
+.hf-plan-meter.is-warning {
+  border-color: rgba(217, 119, 6, .30);
+  background: rgba(255, 251, 235, .9);
+}
+
+.hf-plan-meter.is-warning .hf-plan-meter-bar span {
+  background: linear-gradient(90deg, #d97706, #f59e0b);
+}
+
+.hf-plan-meter small {
+  display: block;
+  margin-top: .48rem;
+  color: #92400e;
+  font-size: .76rem;
+  font-weight: 700;
+}
+
 .hf-section-heading {
   display: flex;
   justify-content: space-between;
@@ -1299,17 +1230,17 @@ a.hf-onboarding-step:hover {
 
 .hf-dashboard-kpi {
   position: relative;
-  min-height: 178px;
+  min-height: 168px;
+  display: block;
   padding: 1.05rem;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, .24);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, .94);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+  color: inherit;
+  text-decoration: none;
   transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
 }
 
 .hf-dashboard-kpi:hover {
+  color: inherit;
   transform: translateY(-2px);
   box-shadow: 0 18px 42px rgba(15, 23, 42, .11);
   border-color: rgba(var(--bs-primary-rgb), .24);
@@ -1368,20 +1299,6 @@ a.hf-onboarding-step:hover {
   font-size: .84rem;
 }
 
-.hf-dashboard-kpi .hf-progress {
-  height: 5px;
-  margin-top: 1.05rem;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, .18);
-  overflow: hidden;
-}
-
-.hf-dashboard-kpi .hf-progress .bar {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--kpi-color, var(--bs-primary));
-}
-
 .hf-dashboard-kpi.kpi-primary {
   --kpi-color: var(--bs-primary);
   --kpi-soft: rgba(var(--bs-primary-rgb), .10);
@@ -1392,43 +1309,163 @@ a.hf-onboarding-step:hover {
   --kpi-soft: rgba(22, 163, 74, .12);
 }
 
-.hf-dashboard-kpi.kpi-danger {
-  --kpi-color: #dc2626;
-  --kpi-soft: rgba(220, 38, 38, .11);
-}
-
 .hf-dashboard-kpi.kpi-warning {
   --kpi-color: #d97706;
   --kpi-soft: rgba(245, 158, 11, .14);
 }
 
-.hf-dashboard-chart-card {
-  padding: 1.1rem;
-  border: 1px solid rgba(148, 163, 184, .24);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, .94);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, .08);
+.hf-dashboard-kpi.kpi-danger {
+  --kpi-color: #dc2626;
+  --kpi-soft: rgba(220, 38, 38, .11);
 }
 
-.hf-chart-head {
+.hf-attention-card,
+.hf-shortcuts-card {
+  height: 100%;
+  padding: 1rem;
+}
+
+.hf-card-head {
   display: flex;
   justify-content: space-between;
-  align-items: start;
+  align-items: flex-start;
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: .9rem;
 }
 
-.hf-chart-head h6 {
-  color: #0f172a;
+.hf-soft-alert {
+  flex: 0 0 auto;
+  padding: .32rem .62rem;
+  border-radius: 999px;
+  color: #991b1b;
+  background: rgba(239, 68, 68, .11);
+  font-size: .76rem;
   font-weight: 850;
 }
 
-.hf-chart-period {
-  white-space: nowrap;
+.hf-attention-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.hf-attention-grid h6 {
+  margin: 0 0 .55rem;
+  color: #0f172a;
+  font-size: .86rem;
+  font-weight: 850;
+}
+
+.hf-attention-list {
+  display: grid;
+  gap: .55rem;
+}
+
+.hf-attention-item {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .7rem;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: .85rem;
+  color: inherit;
+  text-decoration: none;
+  background: #f8fafc;
+}
+
+.hf-attention-item:hover {
+  color: inherit;
+  border-color: rgba(var(--bs-primary-rgb), .28);
+  background: #fff;
+}
+
+.hf-attention-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: .85rem;
+  color: #d97706;
+  background: rgba(245, 158, 11, .13);
+}
+
+.hf-attention-icon.is-money {
+  color: #16a34a;
+  background: rgba(22, 163, 74, .12);
+}
+
+.hf-attention-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: .84rem;
+  font-weight: 850;
+}
+
+.hf-attention-item small {
+  display: block;
+  color: #64748b;
+  font-size: .76rem;
+}
+
+.hf-empty-state {
+  padding: .8rem;
+  border: 1px dashed rgba(148, 163, 184, .35);
+  border-radius: .85rem;
+  color: #64748b;
+  background: rgba(248, 250, 252, .72);
+  font-size: .86rem;
+}
+
+.hf-plan-alert-line {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .9rem;
+  padding: .72rem .8rem;
+  border-radius: .85rem;
+  color: #92400e;
+  background: rgba(255, 251, 235, .95);
+  font-size: .86rem;
+  font-weight: 750;
+}
+
+.hf-shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+.hf-shortcut-grid a {
+  min-height: 74px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: .42rem;
+  padding: .85rem;
+  border: 1px solid rgba(148, 163, 184, .20);
+  border-radius: .9rem;
+  color: #0f172a;
+  text-decoration: none;
+  background: #f8fafc;
+  font-weight: 850;
+}
+
+.hf-shortcut-grid a:hover {
+  border-color: rgba(var(--bs-primary-rgb), .34);
+  background: #fff;
+}
+
+.hf-shortcut-grid i {
+  color: var(--bs-primary);
+  font-size: 1.2rem;
 }
 
 @media (max-width: 991.98px) {
-  .hf-dashboard-top {
+  .hf-dashboard-top,
+  .hf-onboarding-card,
+  .hf-plan-usage-card,
+  .hf-attention-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1436,12 +1473,12 @@ a.hf-onboarding-step:hover {
     width: 100%;
   }
 
-  .hf-onboarding-card {
-    grid-template-columns: 1fr;
-  }
-
   .hf-onboarding-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hf-plan-usage-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1465,41 +1502,24 @@ a.hf-onboarding-step:hover {
     grid-template-columns: 1fr 1fr;
   }
 
-  .hf-btn-apply {
-    width: 100%;
-  }
-
-  .hf-onboarding-card {
-    padding: .85rem;
-    border-radius: 1rem;
-  }
-
-  .hf-onboarding-title-row {
-    align-items: flex-start;
-  }
-
-  .hf-onboarding-progress-number {
-    font-size: 1.15rem;
-  }
-
-  .hf-onboarding-steps {
-    grid-template-columns: 1fr;
-  }
-
+  .hf-btn-apply,
   .hf-onboarding-next .btn {
     width: 100%;
   }
 
-  .hf-dashboard-kpi {
-    min-height: auto;
+  .hf-onboarding-steps,
+  .hf-shortcut-grid {
+    grid-template-columns: 1fr;
   }
 
-  .hf-chart-head {
+  .hf-plan-usage-head,
+  .hf-plan-meter-top {
+    align-items: flex-start;
     flex-direction: column;
   }
 
-  .hf-chart-period {
-    white-space: normal;
+  .hf-dashboard-kpi {
+    min-height: auto;
   }
 }
 
@@ -1510,33 +1530,37 @@ a.hf-onboarding-step:hover {
 }
 
 [data-bs-theme="dark"] .hf-dashboard-filter,
-[data-bs-theme="dark"] .hf-dashboard-kpi,
+[data-bs-theme="dark"] .hf-card,
 [data-bs-theme="dark"] .hf-onboarding-card,
-[data-bs-theme="dark"] .hf-dashboard-chart-card {
+[data-bs-theme="dark"] .hf-plan-usage-card {
   background: rgba(17, 24, 39, .9);
   border-color: rgba(148, 163, 184, .18);
 }
 
 [data-bs-theme="dark"] .hf-section-heading h5,
+[data-bs-theme="dark"] .hf-card-head h5,
 [data-bs-theme="dark"] .hf-dashboard-kpi .kpi-value,
 [data-bs-theme="dark"] .hf-onboarding-title-row h5,
 [data-bs-theme="dark"] .hf-onboarding-progress-number,
 [data-bs-theme="dark"] .hf-onboarding-summary strong,
 [data-bs-theme="dark"] .hf-onboarding-next strong,
 [data-bs-theme="dark"] .hf-onboarding-step-copy strong,
-[data-bs-theme="dark"] .hf-chart-head h6 {
+[data-bs-theme="dark"] .hf-plan-usage-head h5,
+[data-bs-theme="dark"] .hf-plan-meter-top strong,
+[data-bs-theme="dark"] .hf-attention-grid h6,
+[data-bs-theme="dark"] .hf-attention-item strong,
+[data-bs-theme="dark"] .hf-shortcut-grid a {
   color: #e5e7eb;
 }
 
 [data-bs-theme="dark"] .hf-dashboard-filter .form-control,
-[data-bs-theme="dark"] .hf-dashboard-filter .form-select {
-  background-color: rgba(15, 23, 42, .9);
-  border-color: rgba(148, 163, 184, .24);
-}
-
+[data-bs-theme="dark"] .hf-dashboard-filter .form-select,
 [data-bs-theme="dark"] .hf-onboarding-next,
-[data-bs-theme="dark"] .hf-onboarding-step {
-  background: rgba(15, 23, 42, .62);
+[data-bs-theme="dark"] .hf-onboarding-step,
+[data-bs-theme="dark"] .hf-plan-meter,
+[data-bs-theme="dark"] .hf-attention-item,
+[data-bs-theme="dark"] .hf-shortcut-grid a {
+  background: rgba(15, 23, 42, .72);
   border-color: rgba(148, 163, 184, .18);
 }
 </style>
@@ -1569,85 +1593,16 @@ a.hf-onboarding-step:hover {
 </script>
 <?php endif; ?>
 
+<script>
+document.querySelectorAll('.btn-preset').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var form = btn.closest('form');
+    if (!form) return;
+    var input = form.querySelector('input[name="preset"]');
+    if (input) input.value = btn.dataset.preset || '';
+    form.submit();
+  });
+});
+</script>
+
 <?php include __DIR__.'/_layout_end.php'; ?>
-
-<?php if (!$isAtendenteOnly): ?>
-<!-- Chart.js + presets JS (somente para quem pode ver financeiro) -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-document.querySelectorAll('.btn-preset').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    var form = btn.closest('form');
-    form.querySelector('input[name="preset"]').value = btn.dataset.preset;
-    form.submit();
-  });
-});
-
-(function() {
-  var ctx = document.getElementById('graficoOsFin');
-  if (!ctx) return;
-
-  var labels = <?php echo json_encode($labelsJs); ?>;
-  var osData = <?php echo json_encode($osJs, JSON_NUMERIC_CHECK); ?>;
-  var recData = <?php echo json_encode($recJs, JSON_NUMERIC_CHECK); ?>;
-
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          type: 'bar',
-          label: 'Qtd OS',
-          data: osData,
-          yAxisID: 'y',
-        },
-        {
-          type: 'line',
-          label: 'Recebido',
-          data: recData,
-          yAxisID: 'y1',
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      interaction: {
-        mode: 'index',
-        intersect: false,
-      },
-      stacked: false,
-      plugins: {
-        legend: {
-          display: true
-        },
-      },
-      scales: {
-        y: {
-          type: 'linear',
-          position: 'left',
-          title: { display: true, text: 'OS' },
-          ticks: { precision: 0 }
-        },
-        y1: {
-          type: 'linear',
-          position: 'right',
-          title: { display: true, text: 'Recebido (R$)' },
-          grid: { drawOnChartArea: false }
-        }
-      }
-    }
-  });
-})();
-</script>
-<?php else: ?>
-<script>
-document.querySelectorAll('.btn-preset').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    var form = btn.closest('form');
-    form.querySelector('input[name="preset"]').value = btn.dataset.preset;
-    form.submit();
-  });
-});
-</script>
-<?php endif; ?>
