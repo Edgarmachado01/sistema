@@ -43,6 +43,36 @@ function brToFloat($v){
   return (float)$v;
 }
 
+function fetchTenantEntityIds(PDO $pdo, $table, array $ids, $tenantId){
+  if ($table !== 'hf_produtos' && $table !== 'hf_servicos') return [];
+
+  $ids = array_values(array_unique(array_map('intval', $ids)));
+  $ids = array_values(array_filter($ids, function($v){ return $v > 0; }));
+  if (!$ids) return [];
+
+  $params = [':tid' => (int)$tenantId];
+  $ph = [];
+  foreach ($ids as $k => $idv) {
+    $p = ':id' . $k;
+    $ph[] = $p;
+    $params[$p] = (int)$idv;
+  }
+
+  $sql = "SELECT id
+            FROM {$table}
+           WHERE tenant_id = :tid
+             AND deleted_at IS NULL
+             AND id IN (" . implode(',', $ph) . ")";
+  $st = $pdo->prepare($sql);
+  $st->execute($params);
+
+  $map = [];
+  foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $idFound) {
+    $map[(int)$idFound] = true;
+  }
+  return $map;
+}
+
 function osSaveMakeImage($path){
   $info = @getimagesize($path);
   if (!$info || empty($info['mime'])) return null;
@@ -160,6 +190,64 @@ if (!$stCliente->fetch(PDO::FETCH_ASSOC)) {
   exit;
 }
 
+$itensNormalizados = [];
+$produtoRefs = [];
+$servicoRefs = [];
+$n = max(count($item_tipo), count($item_ref), count($item_desc), count($item_qtd), count($item_vu));
+for ($i=0; $i<$n; $i++){
+  $tipo = strtoupper(trim($item_tipo[$i] ?? ''));
+  if ($tipo !== 'P' && $tipo !== 'S') continue;
+
+  $ref  = (int)($item_ref[$i] ?? 0);
+  $desc = trim((string)($item_desc[$i] ?? ''));
+  $qtd  = brToFloat($item_qtd[$i] ?? 0);
+  $vu   = brToFloat($item_vu[$i] ?? 0);
+
+  if ($qtd <= 0) continue;
+  if ($vu < 0) $vu = 0;
+  if ($ref < 0) $ref = 0;
+
+  if ($ref > 0) {
+    if ($tipo === 'P') $produtoRefs[] = $ref;
+    if ($tipo === 'S') $servicoRefs[] = $ref;
+  }
+
+  $itensNormalizados[] = [
+    'tipo' => $tipo,
+    'ref' => $ref,
+    'desc' => $desc,
+    'qtd' => $qtd,
+    'vu' => $vu,
+    'tot' => round($qtd * $vu, 2),
+  ];
+}
+
+$produtosValidos = fetchTenantEntityIds($pdo, 'hf_produtos', $produtoRefs, $tid);
+$servicosValidos = fetchTenantEntityIds($pdo, 'hf_servicos', $servicoRefs, $tid);
+foreach ($itensNormalizados as $item) {
+  if ($item['ref'] <= 0) continue;
+  if ($item['tipo'] === 'P' && empty($produtosValidos[$item['ref']])) {
+    error_log("os_save.php item produto invalido ref={$item['ref']} tenant={$tid} user={$uid}");
+    header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
+    exit;
+  }
+  if ($item['tipo'] === 'S' && empty($servicosValidos[$item['ref']])) {
+    error_log("os_save.php item servico invalido ref={$item['ref']} tenant={$tid} user={$uid}");
+    header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
+    exit;
+  }
+}
+
+$subtotalItens = 0.0;
+foreach ($itensNormalizados as $item) {
+  $subtotalItens += (float)$item['tot'];
+}
+$total = round($subtotalItens + $valor_mao_obra - $desconto + $acrescimo, 2);
+if ($total < 0) $total = 0;
+if ($status_financeiro === 'pago' && $valor_pago <= 0 && $total > 0) {
+  $valor_pago = $total;
+}
+
 // Valida OS antes de qualquer UPDATE/DELETE quando for edicao
 if ($id > 0) {
   $stOs = $pdo->prepare("
@@ -268,22 +356,10 @@ try {
     VALUES (:os,:tipo,:ref,:desc,:qtd,:vu,:tot)
   ");
 
-  $n = max(count($item_tipo), count($item_ref), count($item_desc), count($item_qtd), count($item_vu));
-  for ($i=0; $i<$n; $i++){
-    $tipo = strtoupper(trim($item_tipo[$i] ?? ''));
-    if ($tipo !== 'P' && $tipo !== 'S') continue;
-
-    $ref  = (int)($item_ref[$i] ?? 0);
-    $desc = trim((string)($item_desc[$i] ?? ''));
-    $qtd  = brToFloat($item_qtd[$i] ?? 0);
-    $vu   = brToFloat($item_vu[$i] ?? 0);
-    if ($qtd <= 0) continue;
-
-    $tot  = $qtd * $vu;
-
+  foreach ($itensNormalizados as $item){
     $insItem->execute([
-      ':os'=>$id, ':tipo'=>$tipo, ':ref'=>$ref, ':desc'=>$desc,
-      ':qtd'=>$qtd, ':vu'=>$vu, ':tot'=>$tot
+      ':os'=>$id, ':tipo'=>$item['tipo'], ':ref'=>$item['ref'], ':desc'=>$item['desc'],
+      ':qtd'=>$item['qtd'], ':vu'=>$item['vu'], ':tot'=>$item['tot']
     ]);
   }
 

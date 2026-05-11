@@ -1066,6 +1066,14 @@ function toNumberBR(v){
 function toBR(n){
   return (Number(n)||0).toFixed(2).replace('.',',');
 }
+function escHtml(v){
+  return (v ?? '').toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const tbody = document.getElementById('itensBody');
 
@@ -1086,7 +1094,7 @@ function updateEmptyHint(){
 // linha com data-labels p/ mobile
 function rowTemplate(item){
   const tipo = item?.tipo || 'P';
-  const desc = (item?.descricao || '').replace(/"/g,'&quot;');
+  const desc = escHtml(item?.descricao || '');
   const qtd  = item?.qtd || 1;
   const vu   = item?.valor_unit || 0;
   const tot  = (qtd*vu)||0;
@@ -1143,10 +1151,21 @@ function bindRow(tr){
   function loadRefOptions(){
     const isP = (tipo.value==='P');
     const list = isP ? PRODUTOS : SERVICOS;
-    ref.innerHTML = list.map(i=>`<option value="${i.id}" data-preco="${i.preco}">${i.nome}</option>`).join('');
-    const cur = ref.getAttribute('data-selected'); if (cur) ref.value = cur;
+    const cur = String(ref.getAttribute('data-selected') || ref.value || '');
+    ref.innerHTML = list.map(i=>`<option value="${i.id}" data-preco="${i.preco}">${escHtml(i.nome)}</option>`).join('');
+    if (cur) ref.value = cur;
 
-    const sel = list.find(i=>String(i.id)===String(ref.value));
+    let sel = list.find(i=>String(i.id)===String(ref.value));
+    if (!sel && cur) {
+      const opt = document.createElement('option');
+      opt.value = cur;
+      opt.dataset.preco = String(toNumberBR(vu.value));
+      opt.textContent = desc.value || (isP ? 'Produto não disponível' : 'Serviço não disponível');
+      ref.appendChild(opt);
+      ref.value = cur;
+      sel = { nome: opt.textContent, preco: toNumberBR(vu.value) };
+    }
+
     if (!desc.value && sel) desc.value = sel.nome;
     if (!toNumberBR(vu.value) && sel) vu.value = toBR(sel.preco||0);
     recalc();
@@ -1188,6 +1207,14 @@ function addItem(tipo='P', payload=null){
 
 document.getElementById('addProd').addEventListener('click', ()=>addItem('P'));
 document.getElementById('addServ').addEventListener('click', ()=>addItem('S'));
+['desconto','acrescimo','valor_mao_obra'].forEach(name=>{
+  const el = document.querySelector(`[name="${name}"]`);
+  if (el) {
+    el.addEventListener('input', recalc);
+    el.addEventListener('change', recalc);
+  }
+});
+document.getElementById('osForm')?.addEventListener('submit', recalc);
 
 // Preload itens (edição)
 <?php if ($itens && count($itens)): ?>
