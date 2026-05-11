@@ -1,6 +1,40 @@
 <?php
 if (session_status()===PHP_SESSION_NONE) session_start();
 
+$hfGlobalFeedback = [];
+if (!function_exists('hfPushGlobalFeedback')) {
+  function hfPushGlobalFeedback(array &$bag, $type, $text) {
+    $msg = trim((string)$text);
+    if ($msg === '') return;
+    $kind = strtolower(trim((string)$type));
+    if (!in_array($kind, ['success', 'danger', 'warning', 'info'], true)) {
+      $kind = 'info';
+    }
+    $bag[] = ['type' => $kind, 'text' => $msg];
+  }
+}
+
+if (!empty($_SESSION['HF_GLOBAL_FEEDBACK']) && is_array($_SESSION['HF_GLOBAL_FEEDBACK'])) {
+  foreach ($_SESSION['HF_GLOBAL_FEEDBACK'] as $item) {
+    if (!is_array($item)) continue;
+    hfPushGlobalFeedback($hfGlobalFeedback, $item['type'] ?? 'info', $item['text'] ?? '');
+  }
+  unset($_SESSION['HF_GLOBAL_FEEDBACK']);
+}
+
+$hfLegacyFlashMap = [
+  'HF_FLASH_SUCCESS' => 'success',
+  'HF_FLASH_ERROR' => 'danger',
+  'HF_FLASH_WARNING' => 'warning',
+  'HF_FLASH_INFO' => 'info',
+];
+foreach ($hfLegacyFlashMap as $sessionKey => $kind) {
+  if (!empty($_SESSION[$sessionKey])) {
+    hfPushGlobalFeedback($hfGlobalFeedback, $kind, $_SESSION[$sessionKey]);
+    unset($_SESSION[$sessionKey]);
+  }
+}
+
 require_once __DIR__.'/auth.php';
 requireLogin();
 require_once __DIR__.'/db.php';
@@ -189,7 +223,7 @@ if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
 
   <style>:root{ --bs-primary:#<?= $hex ?>; --bs-primary-rgb:<?= "$r,$g,$b" ?>; --brand:#<?= $hex ?>; --brand-rgb:<?= "$r,$g,$b" ?>; }</style>
 
-  <link rel="stylesheet" href="assets/theme.css?v=7">
+  <link rel="stylesheet" href="assets/theme.css?v=8">
 </head>
 <body>
 

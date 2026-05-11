@@ -1,7 +1,25 @@
 <?php /* ========= _layout_end.php ========= */ ?>
-  </div> <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  </div>
 
-  <script src="assets/theme.js?v=7"></script>
+  <div id="hf-feedback-toast-container"
+       class="toast-container position-fixed top-0 end-0 p-3"
+       aria-live="polite"
+       aria-atomic="true"></div>
+
+  <div id="hf-global-loading" class="hf-global-loading d-none" aria-hidden="true">
+    <div class="hf-global-loading-card">
+      <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+      <span>Processando...</span>
+    </div>
+  </div>
+
+  <script>
+    window.HF_GLOBAL_FEEDBACK = <?= json_encode($hfGlobalFeedback ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script src="assets/theme.js?v=8"></script>
 
 
   <script>
