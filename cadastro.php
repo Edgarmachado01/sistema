@@ -53,116 +53,20 @@ $whatsappUrl = 'https://wa.me/5500000000000?text=Quero%20come%C3%A7ar%20um%20tes
 
 include __DIR__.'/_site_start.php';
 ?>
-    <section class="hf-hero">
+    <section class="hf-section pt-4 pb-2">
       <div class="container">
-        <div class="hf-hero-grid">
+        <div class="hf-signup-head-card">
           <div>
             <span class="hf-section-kicker">
               <i class="bi bi-rocket-takeoff" aria-hidden="true"></i>
               Teste gratis
             </span>
-
-            <h1 class="hf-hero-title">Crie o acesso da sua assist&ecirc;ncia.</h1>
-
-            <p class="hf-hero-text">
-              Preencha os dados da empresa para preparar seu ambiente de teste no HelpDesk Facil. Depois, voce acessa o painel com o codigo da empresa, e-mail e senha.
-            </p>
-
-            <div class="hf-hero-proof" aria-label="Resumo do cadastro">
-              <span><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Sem cobranca agora</span>
-              <span><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ambiente por empresa</span>
-              <span><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Plano <?= htmlspecialchars($planoAtual['nome'], ENT_QUOTES, 'UTF-8') ?></span>
-            </div>
+            <h1 class="h3 fw-bold mb-1">Crie sua conta de teste</h1>
+            <p class="text-secondary mb-0">Preencha os dados abaixo e comece a usar o painel em instantes.</p>
           </div>
-
-          <div class="hf-hero-visual" aria-label="Resumo do teste gratis">
-            <div class="hf-hero-visual-bar">
-              <div class="hf-window-controls">
-                <span class="hf-hero-dot"></span>
-                <span class="hf-hero-dot"></span>
-                <span class="hf-hero-dot"></span>
-              </div>
-              <div class="hf-app-pill">
-                <i class="bi bi-shield-check" aria-hidden="true"></i>
-                cadastro.helpdeskfacil.com
-              </div>
-              <span class="hf-live-badge">Trial</span>
-            </div>
-
-            <div class="hf-hero-visual-body">
-              <div class="hf-product-shell">
-                <aside class="hf-product-sidebar" aria-hidden="true">
-                  <div class="hf-product-mark"></div>
-                  <span class="is-active"><i class="bi bi-building-add"></i></span>
-                  <span><i class="bi bi-person-check"></i></span>
-                  <span><i class="bi bi-key"></i></span>
-                  <span><i class="bi bi-stars"></i></span>
-                </aside>
-
-                <div class="hf-product-main">
-                  <div class="hf-product-head">
-                    <div>
-                      <p>Configuracao inicial</p>
-                      <h2>Empresa em teste</h2>
-                    </div>
-                    <span class="hf-status-pill"><i class="bi bi-clock-history" aria-hidden="true"></i> Aguardando criacao</span>
-                  </div>
-
-                  <div class="hf-metric-grid">
-                    <div class="hf-metric-card metric-blue">
-                      <span><i class="bi bi-layers" aria-hidden="true"></i> Plano</span>
-                      <strong><?= htmlspecialchars($planoAtual['nome'], ENT_QUOTES, 'UTF-8') ?></strong>
-                      <small>Selecionado</small>
-                    </div>
-                    <div class="hf-metric-card metric-green">
-                      <span><i class="bi bi-people" aria-hidden="true"></i> Usuarios</span>
-                      <strong><?= htmlspecialchars($planoAtual['usuarios'], ENT_QUOTES, 'UTF-8') ?></strong>
-                      <small>Limite inicial</small>
-                    </div>
-                    <div class="hf-metric-card metric-purple">
-                      <span><i class="bi bi-clipboard-check" aria-hidden="true"></i> OS</span>
-                      <strong><?= htmlspecialchars($planoAtual['os'], ENT_QUOTES, 'UTF-8') ?></strong>
-                      <small>Volume mensal</small>
-                    </div>
-                  </div>
-
-                  <div class="hf-panel-card">
-                    <div class="hf-panel-head">
-                      <h3>Proximos passos</h3>
-                      <span>Trial</span>
-                    </div>
-
-                    <div class="hf-os-list">
-                      <div class="hf-os-row">
-                        <span class="hf-os-icon bg-blue"><i class="bi bi-building"></i></span>
-                        <div>
-                          <strong>Criar empresa</strong>
-                          <small>Gerar ambiente separado por codigo</small>
-                        </div>
-                        <span class="hf-tag tag-primary">1</span>
-                      </div>
-                      <div class="hf-os-row">
-                        <span class="hf-os-icon bg-green"><i class="bi bi-person-lock"></i></span>
-                        <div>
-                          <strong>Criar administrador</strong>
-                          <small>Responsavel acessa o painel</small>
-                        </div>
-                        <span class="hf-tag tag-success">2</span>
-                      </div>
-                      <div class="hf-os-row">
-                        <span class="hf-os-icon bg-purple"><i class="bi bi-speedometer2"></i></span>
-                        <div>
-                          <strong>Liberar painel</strong>
-                          <small>Comecar a cadastrar OS e clientes</small>
-                        </div>
-                        <span class="hf-tag tag-warning">3</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <span class="hf-plan-chip">
+            Plano <?= htmlspecialchars($planoAtual['nome'], ENT_QUOTES, 'UTF-8') ?>
+          </span>
         </div>
       </div>
     </section>
@@ -170,11 +74,11 @@ include __DIR__.'/_site_start.php';
     <section class="hf-section">
       <div class="container">
         <div class="row g-4 align-items-start">
-          <div class="col-lg-7">
-            <div class="hf-plan-card">
+          <div class="col-lg-8">
+            <div class="hf-plan-card hf-signup-form-card">
               <span class="hf-plan-badge">Teste gratis</span>
-              <h2 class="h1 fw-bold mb-2">Dados para criar sua conta</h2>
-              <p class="text-secondary mb-4">Preencha os dados abaixo para criar o ambiente de teste da sua empresa.</p>
+              <h2 class="h4 fw-bold mb-2">Cadastro da empresa</h2>
+              <p class="text-secondary mb-4">Informe os dados para liberar seu acesso de teste.</p>
 
               <?php if ($signupError): ?>
                 <div class="alert alert-danger rounded-4 mb-4" role="alert">
@@ -183,7 +87,7 @@ include __DIR__.'/_site_start.php';
                 </div>
               <?php endif; ?>
 
-              <form method="post" action="/cadastro_save.php">
+              <form method="post" action="/cadastro_save.php" novalidate>
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
 
                 <div class="row g-3">
@@ -210,7 +114,7 @@ include __DIR__.'/_site_start.php';
                   <div class="col-md-6">
                     <label class="form-label fw-bold" for="empresa_slug">Codigo da empresa</label>
                     <input class="form-control form-control-lg" id="empresa_slug" name="empresa_slug" type="text" placeholder="assistencia-pro" autocomplete="organization" value="<?= hfSignupField($oldInput, 'empresa_slug') ?>" required>
-                    <div class="form-text">Voce usara esse codigo no login da empresa.</div>
+                    <div class="form-text">Esse codigo sera usado no login da sua empresa.</div>
                   </div>
 
                   <div class="col-md-6">
@@ -245,28 +149,26 @@ include __DIR__.'/_site_start.php';
             </div>
           </div>
 
-          <div class="col-lg-5">
-            <aside class="hf-plan-card is-featured">
-              <span class="hf-plan-badge">Plano selecionado</span>
-              <h2 class="hf-plan-name"><?= htmlspecialchars($planoAtual['nome'], ENT_QUOTES, 'UTF-8') ?></h2>
-              <p class="hf-plan-description"><?= htmlspecialchars($planoAtual['descricao'], ENT_QUOTES, 'UTF-8') ?></p>
+          <div class="col-lg-4">
+            <aside class="hf-plan-card hf-signup-side-card is-featured">
+              <span class="hf-plan-badge">Seu acesso</span>
+              <h2 class="h5 fw-bold mb-2">Teste gratis do HelpDesk Facil</h2>
+              <p class="text-secondary mb-3">Plano inicial: <strong><?= htmlspecialchars($planoAtual['nome'], ENT_QUOTES, 'UTF-8') ?></strong></p>
 
-              <ul class="hf-plan-list">
-                <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= htmlspecialchars($planoAtual['usuarios'], ENT_QUOTES, 'UTF-8') ?></li>
-                <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= htmlspecialchars($planoAtual['os'], ENT_QUOTES, 'UTF-8') ?></li>
-                <?php foreach ($planoAtual['destaques'] as $destaque): ?>
-                  <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= htmlspecialchars($destaque, ENT_QUOTES, 'UTF-8') ?></li>
-                <?php endforeach; ?>
+              <ul class="hf-plan-list hf-signup-side-list">
+                <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> teste gratis</li>
+                <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> sem compromisso</li>
+                <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> acesso imediato</li>
+                <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> dados protegidos</li>
               </ul>
 
-              <div class="border rounded-4 p-3 bg-white mt-4">
-                <div class="d-flex gap-3">
-                  <span class="hf-card-icon mb-0"><i class="bi bi-info-circle" aria-hidden="true"></i></span>
-                  <div>
-                    <h3 class="h6 fw-bold mb-1">Sem pagamento agora</h3>
-                    <p class="text-secondary mb-0">Esta tela prepara o cadastro do trial. A cobranca recorrente entra em uma etapa futura.</p>
-                  </div>
-                </div>
+              <div class="hf-signup-side-note">
+                <div><strong><?= htmlspecialchars($planoAtual['usuarios'], ENT_QUOTES, 'UTF-8') ?></strong></div>
+                <small>Limite inicial de usuarios</small>
+              </div>
+              <div class="hf-signup-side-note">
+                <div><strong><?= htmlspecialchars($planoAtual['os'], ENT_QUOTES, 'UTF-8') ?></strong></div>
+                <small>Capacidade de ordens de servico</small>
               </div>
 
               <a class="btn hf-btn-secondary w-100 mt-3" href="/planos.php">Ver outros planos</a>
@@ -279,6 +181,66 @@ include __DIR__.'/_site_start.php';
         </div>
       </div>
     </section>
+
+    <style>
+      .hf-signup-head-card {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: .9rem;
+        border: 1px solid rgba(148,163,184,.22);
+        border-radius: 1rem;
+        background: #fff;
+        padding: 1rem 1.1rem;
+      }
+
+      .hf-plan-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: .38rem .72rem;
+        background: rgba(var(--bs-primary-rgb), .08);
+        color: var(--bs-primary);
+        font-weight: 700;
+        font-size: .85rem;
+      }
+
+      .hf-signup-form-card {
+        padding-top: 1.15rem;
+      }
+
+      .hf-signup-side-card {
+        position: sticky;
+        top: 1rem;
+      }
+
+      .hf-signup-side-list li {
+        font-size: .95rem;
+      }
+
+      .hf-signup-side-note {
+        border: 1px solid rgba(148,163,184,.22);
+        border-radius: .8rem;
+        padding: .65rem .75rem;
+        background: #fff;
+        margin-top: .6rem;
+      }
+
+      .hf-signup-side-note strong {
+        font-size: 1rem;
+      }
+
+      .hf-signup-side-note small {
+        color: #64748b;
+      }
+
+      @media (max-width: 991.98px) {
+        .hf-signup-side-card {
+          position: static;
+        }
+      }
+    </style>
 
     <a class="hf-floating-whatsapp" href="<?= htmlspecialchars($whatsappUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
       <i class="bi bi-whatsapp" aria-hidden="true"></i>
