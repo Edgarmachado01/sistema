@@ -1,11 +1,6 @@
 <?php
 // lancamento_form.php — Cadastro/edição de lançamento (entrada/saída)
 
-// DEBUG (se quiser, pode depois colocar display_errors 0 em produção)
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 // ===== BOOTSTRAP BÁSICO (sem enviar HTML ainda) =====
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -16,6 +11,10 @@ require_once __DIR__.'/db.php';
 
 $pdo = db();
 $tid = tenantId();
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = (string)$_SESSION['csrf_token'];
 
 $id = isset($_GET['id']) && ctype_digit($_GET['id']) ? (int)$_GET['id'] : 0;
 $modoEdicao = $id > 0;
@@ -76,6 +75,11 @@ if ($modoEdicao && $_SERVER['REQUEST_METHOD'] !== 'POST') {
 // POST (salvar) – ANTES DE QUALQUER HTML
 // -------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $sessionToken = (string)($_SESSION['csrf_token'] ?? '');
+    $postToken = (string)($_POST['csrf_token'] ?? '');
+    if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+        $erros[] = 'Sessao expirada. Recarregue a pagina e tente novamente.';
+    }
 
     $idPost         = isset($_POST['id']) && ctype_digit($_POST['id']) ? (int)$_POST['id'] : 0;
     $modoEdicao     = $idPost > 0;
@@ -302,6 +306,7 @@ if (file_exists(__DIR__.'/layout_start.php')) {
     <?php endif; ?>
 
     <form method="post" class="hf-lanc-form-shell">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
       <input type="hidden" name="id" value="<?= (int)$id ?>">
 
       <div class="card mb-3 hf-form-section">

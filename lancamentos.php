@@ -1,9 +1,6 @@
 <?php
 // lancamentos.php — Lançamentos (entradas / saídas avulsas e recorrentes)
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
 
 $PAGE_TITLE = 'Lançamentos';
 
@@ -13,7 +10,11 @@ require_once __DIR__.'/auth.php';
 
 $pdo = db();
 $tid = tenantId();
-if (!$tid) die('Tenant inválido.');
+if (!$tid) {
+  error_log('lancamentos.php tenant invalido user=' . ($_SESSION['USER_ID'] ?? ''));
+  header('Location: /login.php');
+  exit;
+}
 
 // Token CSRF para ações POST
 if (empty($_SESSION['csrf_token'])) {

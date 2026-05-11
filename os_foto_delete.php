@@ -78,6 +78,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonOut(false, 'Método inválido.');
 }
 
+$sessionToken = (string)($_SESSION['csrf_token'] ?? '');
+$postToken = (string)($_POST['csrf_token'] ?? '');
+if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+    error_log('os_foto_delete.php csrf invalido user=' . ($_SESSION['USER_ID'] ?? ''));
+    http_response_code(400);
+    jsonOut(false, 'Requisicao invalida.');
+}
 $pdo = db();
 $tid = function_exists('tenantId') ? (int)tenantId() : (int)($_SESSION['tenant_id'] ?? 0);
 $fotoId = (int)($_POST['id'] ?? 0);
@@ -161,3 +168,4 @@ try {
     http_response_code(500);
     jsonOut(false, 'Erro ao excluir foto.');
 }
+

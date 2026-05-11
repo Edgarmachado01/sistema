@@ -1,9 +1,6 @@
 <?php
 // financeiro_os_lista.php — Lista de títulos financeiros das OS + visão geral com lançamentos
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
 
 // === LAYOUT / AUTH / DB ===
 require_once __DIR__.'/_layout_start.php';
@@ -14,8 +11,9 @@ requireAdmin();
 $pdo = db();
 $tid = function_exists('tenantId') ? (int)tenantId() : (int)($_SESSION['tenant_id'] ?? 0);
 if ($tid <= 0) {
-    http_response_code(400);
-    exit('Tenant inválido.');
+    error_log('financeiro_os_lista.php tenant invalido user=' . ($_SESSION['USER_ID'] ?? ''));
+    header('Location: /login.php');
+    exit;
 }
 
 $hoje        = date('Y-m-d');
