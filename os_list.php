@@ -5,7 +5,7 @@ require_once __DIR__.'/auth.php';
 
 $pdo = db();
 $tid = tenantId();
-if (!$tid) die('Tenant inválido.');
+if (!$tid) { header('Location: /login.php'); exit; }
 
 // Token CSRF para ações de exclusão via POST
 if (empty($_SESSION['csrf_token'])) {
@@ -33,7 +33,7 @@ if ($status!=='') {
 
 $sqlCount = "SELECT COUNT(*)
              FROM hf_os o
-             JOIN hf_clientes c ON c.id=o.cliente_id AND c.deleted_at IS NULL
+             JOIN hf_clientes c ON c.id=o.cliente_id AND c.tenant_id=o.tenant_id AND c.deleted_at IS NULL
              WHERE $where";
 $st = $pdo->prepare($sqlCount);
 $st->execute($params);
@@ -45,7 +45,7 @@ $sql = "SELECT
           o.status_financeiro,o.valor_pago,
           c.nome AS cliente
         FROM hf_os o
-        JOIN hf_clientes c ON c.id=o.cliente_id
+        JOIN hf_clientes c ON c.id=o.cliente_id AND c.tenant_id=o.tenant_id AND c.deleted_at IS NULL
         WHERE $where
         ORDER BY o.id DESC
         LIMIT :per OFFSET :off";

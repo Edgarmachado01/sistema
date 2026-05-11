@@ -70,6 +70,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonOut(false, 'Método inválido.');
 }
 
+$sessionToken = (string)($_SESSION['csrf_token'] ?? '');
+$postToken = (string)($_POST['csrf_token'] ?? '');
+if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+    error_log('os_foto_upload.php csrf invalido user=' . ($_SESSION['USER_ID'] ?? ''));
+    http_response_code(400);
+    jsonOut(false, 'Requisicao invalida.');
+}
+
 if (!function_exists('imagecreatetruecolor') || !function_exists('imagejpeg')) {
     http_response_code(500);
     jsonOut(false, 'Biblioteca de imagens indisponível.');

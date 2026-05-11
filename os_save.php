@@ -13,8 +13,8 @@ if (session_status() === PHP_SESSION_NONE) {
 $pdo = db();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-  http_response_code(405);
-  exit('Metodo invalido.');
+  header('Location: /os_list.php');
+  exit;
 }
 
 // CSRF
@@ -31,8 +31,8 @@ if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $po
 $tid = function_exists('tenantId') ? (int)tenantId() : (int)($_SESSION['tenant_id'] ?? 0);
 $uid = (int)($_SESSION['USER_ID'] ?? $_SESSION['user_id'] ?? (function_exists('userId') ? userId() : 0));
 
-if ($tid <= 0) { http_response_code(400); exit('Tenant invalido.'); }
-if ($uid <= 0) { http_response_code(401); exit('Usuario invalido.'); }
+if ($tid <= 0) { header('Location: /login.php'); exit; }
+if ($uid <= 0) { header('Location: /login.php'); exit; }
 
 // -------- helpers --------
 function brToFloat($v){
@@ -103,7 +103,7 @@ $status_financeiro = trim((string)($_POST['status_financeiro'] ?? 'pendente'));
 $valor_pago        = brToFloat($_POST['valor_pago'] ?? 0);
 $data_pagto_raw    = trim((string)($_POST['data_pagto'] ?? ''));
 
-if ($id < 0) { http_response_code(400); exit('ID invalido.'); }
+if ($id < 0) { header('Location: /os_list.php'); exit; }
 if ($garantia_dias < 0) { $garantia_dias = 0; }
 if ($status === '') { $status = 'aberta'; }
 if ($prioridade === '') { $prioridade = 'baixa'; }
@@ -134,8 +134,8 @@ if ($status_financeiro === 'pago') {
 }
 
 if ($data_pagto_raw !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_pagto_raw)) {
-  http_response_code(400);
-  exit('Data de pagamento invalida.');
+  header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
+  exit;
 }
 
 // Itens
@@ -150,7 +150,15 @@ if (!is_array($item_desc)) $item_desc = [];
 if (!is_array($item_qtd))  $item_qtd  = [];
 if (!is_array($item_vu))   $item_vu   = [];
 
-if ($cliente_id <= 0) { http_response_code(400); exit('Cliente obrigatorio.'); }
+if ($cliente_id <= 0) { header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : '')); exit; }
+
+$stCliente = $pdo->prepare("SELECT id FROM hf_clientes WHERE id = :id AND tenant_id = :t AND deleted_at IS NULL LIMIT 1");
+$stCliente->execute([':id' => $cliente_id, ':t' => $tid]);
+if (!$stCliente->fetch(PDO::FETCH_ASSOC)) {
+  error_log("os_save.php cliente invalido para tenant cliente_id={$cliente_id} tenant={$tid} user={$uid}");
+  header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
+  exit;
+}
 
 // Valida OS antes de qualquer UPDATE/DELETE quando for edicao
 if ($id > 0) {
@@ -448,7 +456,7 @@ try {
     $pdo->rollBack();
   }
 
-  http_response_code(500);
   error_log('os_save.php fatal: '.$e->getMessage());
-  exit('Erro ao salvar OS. Tente novamente.');
+  header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
+  exit;
 }

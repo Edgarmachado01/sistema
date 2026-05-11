@@ -1,11 +1,6 @@
 <?php
 // os_form.php — Formulário de OS com fotos (upload normal + async), galeria em modal e itens mobile-friendly
 
-// === DEBUG (remova em produção) ===
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
 // === LAYOUT / AUTH ===
 require_once __DIR__.'/_layout_start.php';
 require_once __DIR__.'/db.php';
@@ -13,7 +8,7 @@ require_once __DIR__.'/auth.php';
 
 $pdo = db();
 $tid = tenantId();
-if (!$tid) die('Tenant inválido.');
+if (!$tid) { header('Location: /login.php'); exit; }
 
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -529,8 +524,6 @@ if ($os && !empty($os['garantia_ate'])) {
   </div>
 </div>
 <?php endif; ?>
-
-<?php require_once __DIR__.'/_layout_end.php'; ?>
 
 <!-- ====== CSS: OS Form + Itens + Galeria ====== -->
 <style>
@@ -1273,6 +1266,7 @@ recalc();
     const osId = up.getAttribute('data-os-id');
     const fd = new FormData();
     fd.append('os_id', osId);
+    fd.append('csrf_token', <?= json_encode($csrfToken) ?>);
 
     let validFiles = 0;
     for (let i=0;i<files.length;i++){
@@ -1348,6 +1342,7 @@ recalc();
       const id = btn.getAttribute('data-id');
       const fd = new FormData();
       fd.append('id', id);
+      fd.append('csrf_token', <?= json_encode($csrfToken) ?>);
 
       try{
         const r = await fetch('/os_foto_delete.php', { method:'POST', body: fd });
@@ -1469,3 +1464,5 @@ document.querySelectorAll('[data-gd]').forEach(btn=>{
   });
 })();
 </script>
+
+<?php require_once __DIR__.'/_layout_end.php'; ?>

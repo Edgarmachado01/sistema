@@ -13,7 +13,8 @@ require_once __DIR__.'/auth.php';
 $pdo = db();
 $tid = tenantId();
 if (!$tid) {
-    die('Tenant inválido.');
+    header('Location: /login.php');
+    exit;
 }
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -32,7 +33,7 @@ if ($id <= 0) {
             o.*,
             c.nome AS cliente_nome
         FROM hf_os o
-        JOIN hf_clientes c ON c.id = o.cliente_id
+        JOIN hf_clientes c ON c.id = o.cliente_id AND c.tenant_id = o.tenant_id
         WHERE o.tenant_id  = :tid
           AND o.deleted_at IS NULL
           AND c.deleted_at IS NULL
