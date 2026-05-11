@@ -79,6 +79,11 @@
       <span class="hf-menu-label">Usuários</span>
     </a>
 
+    <a class="nav-link hf-menu-item hf-account-item <?= ($_GET['m'] ?? '') === 'billing' ? 'active' : '' ?>" href="/billing.php?m=billing" title="Plano &amp; Cobranca">
+      <span class="hf-ico hf-menu-icon"><i class="bi bi-credit-card-2-front"></i></span>
+      <span class="hf-menu-label">Plano &amp; Cobranca</span>
+    </a>
+
     <a class="nav-link hf-menu-item hf-account-item <?= ($_GET['m'] ?? '') === 'reset_senha' ? 'active' : '' ?>" href="/admin_reset_password.php?m=reset_senha" title="Reset de senha">
       <span class="hf-ico hf-menu-icon"><i class="bi bi-shield-lock"></i></span>
       <span class="hf-menu-label">Reset de senha</span>

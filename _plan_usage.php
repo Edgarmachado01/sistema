@@ -42,8 +42,9 @@ if (!function_exists('hfTenantUsage')) {
             $usage['has_reports'] = (int)($subscription['has_reports'] ?? 0) === 1;
             $usage['has_branding'] = (int)($subscription['has_branding'] ?? 0) === 1;
 
-            $usage['is_trial'] = $usage['subscription_status'] === 'trial';
-            $usage['is_active'] = in_array($usage['subscription_status'], ['trial', 'ativo'], true);
+            $usage['is_trial'] = $usage['plan_code'] !== 'cortesia' && $usage['subscription_status'] === 'trial';
+            $usage['is_active'] = $usage['plan_code'] === 'cortesia'
+                || in_array($usage['subscription_status'], ['trial', 'ativo'], true);
 
             return hfTenantUsageFinalize($usage, $isSysAdmin);
         } catch (Exception $e) {

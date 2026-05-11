@@ -5,6 +5,7 @@ require_once __DIR__.'/auth.php';
 requireAdmin();
 
 require_once __DIR__.'/db.php';
+require_once __DIR__.'/_plan_usage.php';
 
 $pdo = db();
 
@@ -14,6 +15,28 @@ $tenantId = function_exists('tenantId')
     : ($_SESSION['TENANT_ID'] ?? $_SESSION['tenant_id'] ?? null);
 
 $tenantId = ($tenantId === '' || $tenantId === null) ? null : (int)$tenantId;
+
+// ===== Uso comercial do plano =====
+$isSysAdminUser = function_exists('isSysAdmin') && isSysAdmin();
+$planUsage = null;
+$showUserLimitUsage = false;
+$userLimitReached = false;
+$userLimitLabel = 'Ilimitado';
+$activeUsersCount = 0;
+$userLimit = 0;
+
+if (!$isSysAdminUser && $tenantId) {
+    try {
+        $planUsage = hfTenantUsage($pdo, $tenantId);
+        $activeUsersCount = (int)($planUsage['active_users'] ?? 0);
+        $userLimit = (int)($planUsage['user_limit'] ?? 0);
+        $userLimitLabel = $userLimit > 0 ? (string)$userLimit : 'Ilimitado';
+        $userLimitReached = $userLimit > 0 && $activeUsersCount >= $userLimit;
+        $showUserLimitUsage = true;
+    } catch (Exception $e) {
+        error_log('usuarios.php plan usage: '.$e->getMessage());
+    }
+}
 
 // ===== CSRF =====
 if (empty($_SESSION['csrf_token'])) {
@@ -107,8 +130,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                 throw new Exception('Role não encontrado.');
             }
 
+            $activeUsersForLimit = $activeUsersCount;
+            if (!$isSysAdminUser && $userLimit > 0) {
+                $stActiveLimit = $pdo->prepare("
+                    SELECT COUNT(*)
+                      FROM users
+                     WHERE (tenant_id <=> :tenant_id)
+                       AND is_active = 1
+                ");
+                $stActiveLimit->execute([':tenant_id' => $tenantId]);
+                $activeUsersForLimit = (int)$stActiveLimit->fetchColumn();
+            }
+
             if ($id) {
                 // ===== UPDATE =====
+                $stCurrentUser = $pdo->prepare("
+                    SELECT is_active
+                      FROM users
+                     WHERE id = :id
+                       AND (tenant_id <=> :tenant_id)
+                     LIMIT 1
+                ");
+                $stCurrentUser->execute([
+                    ':id' => $id,
+                    ':tenant_id' => $tenantId,
+                ]);
+                $currentUser = $stCurrentUser->fetch(PDO::FETCH_ASSOC);
+                $wasActive = $currentUser ? (int)$currentUser['is_active'] === 1 : false;
+
+                if (!$isSysAdminUser && !$wasActive && $isActive === 1 && $userLimit > 0 && $activeUsersForLimit >= $userLimit) {
+                    error_log('usuarios.php limite usuarios reativacao tenant='.$tenantId.' user='.$id);
+                    $flashError = 'Voce atingiu o limite de usuarios do seu plano.';
+                }
                 // checa se já existe outro usuário com o mesmo e-mail neste tenant
                 $sqlCheck = "SELECT id
                                FROM users
@@ -121,7 +174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     ':tenant_id' => $tenantId,
                     ':id'        => $id,
                 ]);
-                if ($stCheck->fetchColumn()) {
+                if ($flashError !== '') {
+                    // Mantem a transacao aberta para o rollback centralizado abaixo.
+                } elseif ($stCheck->fetchColumn()) {
                     $flashError = 'Já existe um usuário com este e-mail nesta empresa.';
                 } else {
                     $params = [
@@ -181,7 +236,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
                     ':email'     => $email,
                     ':tenant_id' => $tenantId,
                 ]);
-                if ($stCheck->fetchColumn()) {
+                if (!$isSysAdminUser && $isActive === 1 && $userLimit > 0 && $activeUsersForLimit >= $userLimit) {
+                    error_log('usuarios.php limite usuarios novo tenant='.$tenantId);
+                    $flashError = 'Voce atingiu o limite de usuarios do seu plano.';
+                } elseif ($stCheck->fetchColumn()) {
                     $flashError = 'Já existe um usuário com este e-mail nesta empresa.';
                 } else {
                     $sqlIns = "INSERT INTO users (name, email, password_hash, tenant_id, is_active, created_at)
@@ -298,6 +356,8 @@ if ($editUser) {
     $formIsActive = !empty($editUser['is_active']);
 }
 
+$blockNewUserForm = !$editUser && !$isSysAdminUser && $userLimitReached;
+
 include __DIR__.'/_layout_start.php';
 include __DIR__.'/_sidebar.php';
 ?>
@@ -314,7 +374,7 @@ include __DIR__.'/_sidebar.php';
         <div class="hf-page-subtitle">Gerencie acessos, papéis e status dos usuários.</div>
       </div>
 
-      <a href="usuarios.php?m=usuarios" class="btn btn-sm btn-outline-secondary hf-btn-new-user">
+      <a href="usuarios.php?m=usuarios" class="btn btn-sm btn-outline-secondary hf-btn-new-user <?= $blockNewUserForm ? 'disabled' : '' ?>" <?= $blockNewUserForm ? 'aria-disabled="true" tabindex="-1"' : '' ?>>
         <i class="bi bi-plus-lg me-1"></i>Novo usuário
       </a>
     </div>
@@ -330,6 +390,30 @@ include __DIR__.'/_sidebar.php';
     <?php endif; ?>
 
     <!-- Formulário -->
+    <?php if ($showUserLimitUsage): ?>
+      <div class="hf-user-limit-box <?= $userLimitReached ? 'is-limit' : '' ?>">
+        <div class="hf-user-limit-main">
+          <span class="hf-user-limit-icon">
+            <i class="bi bi-person-check" aria-hidden="true"></i>
+          </span>
+          <div>
+            <strong>Usuarios ativos: <?= (int)$activeUsersCount ?> / <?= htmlspecialchars($userLimitLabel, ENT_QUOTES, 'UTF-8') ?></strong>
+            <?php if ($userLimitReached): ?>
+              <small>Voce atingiu o limite de usuarios do seu plano.</small>
+            <?php else: ?>
+              <small>O limite considera apenas usuarios ativos.</small>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <?php if ($userLimitReached): ?>
+          <a class="btn btn-sm btn-outline-primary" href="https://wa.me/5500000000000?text=Quero%20aumentar%20o%20limite%20de%20usuarios%20do%20meu%20plano" target="_blank" rel="noopener">
+            Falar no WhatsApp para aumentar limite
+          </a>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
+
     <div class="hf-users-card mb-3">
       <div class="hf-users-card-head">
         <div class="hf-users-icon">
@@ -342,6 +426,15 @@ include __DIR__.'/_sidebar.php';
       </div>
 
       <div class="hf-users-card-body">
+        <?php if ($blockNewUserForm): ?>
+          <div class="hf-user-limit-empty">
+            <i class="bi bi-lock" aria-hidden="true"></i>
+            <div>
+              <strong>Voce atingiu o limite de usuarios do seu plano.</strong>
+              <p>Para criar um novo usuario ativo, desative algum usuario existente ou fale com a gente para aumentar seu limite.</p>
+            </div>
+          </div>
+        <?php else: ?>
         <form method="post" autocomplete="off">
           <input type="hidden" name="acao" value="salvar_usuario">
           <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
@@ -410,6 +503,7 @@ include __DIR__.'/_sidebar.php';
             </div>
           </div>
         </form>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -593,6 +687,95 @@ include __DIR__.'/_sidebar.php';
   border: 1px solid rgba(148, 163, 184, .24);
   border-radius: .9rem;
   box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+}
+
+.hf-user-limit-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: .9rem 1rem;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+}
+
+.hf-user-limit-box.is-limit {
+  border-color: rgba(217, 119, 6, .30);
+  background:
+    linear-gradient(90deg, rgba(255, 251, 235, .96), rgba(255, 255, 255, .94));
+}
+
+.hf-user-limit-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+}
+
+.hf-user-limit-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border-radius: .9rem;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), .10);
+}
+
+.hf-user-limit-box.is-limit .hf-user-limit-icon {
+  color: #d97706;
+  background: rgba(245, 158, 11, .14);
+}
+
+.hf-user-limit-main strong {
+  display: block;
+  color: #0f172a;
+  font-weight: 850;
+}
+
+.hf-user-limit-main small {
+  display: block;
+  margin-top: .08rem;
+  color: #64748b;
+  font-size: .84rem;
+}
+
+.hf-user-limit-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: .8rem;
+  padding: 1rem;
+  border: 1px dashed rgba(217, 119, 6, .36);
+  border-radius: .95rem;
+  color: #92400e;
+  background: rgba(255, 251, 235, .78);
+}
+
+.hf-user-limit-empty > i {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: .8rem;
+  color: #d97706;
+  background: rgba(245, 158, 11, .14);
+}
+
+.hf-user-limit-empty strong {
+  display: block;
+  color: #78350f;
+  font-weight: 900;
+}
+
+.hf-user-limit-empty p {
+  margin: .18rem 0 0;
+  color: #92400e;
+  font-size: .9rem;
 }
 
 .hf-users-card {
@@ -859,6 +1042,15 @@ include __DIR__.'/_sidebar.php';
     padding: .44rem .62rem;
   }
 
+  .hf-user-limit-box {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hf-user-limit-box .btn {
+    width: 100%;
+  }
+
   .hf-btn-save-user {
     width: 100%;
   }
@@ -874,7 +1066,8 @@ include __DIR__.'/_sidebar.php';
     linear-gradient(180deg, #111827 0%, #0f172a 100%);
 }
 
-[data-bs-theme="dark"] .hf-users-card {
+[data-bs-theme="dark"] .hf-users-card,
+[data-bs-theme="dark"] .hf-user-limit-box {
   background: rgba(17, 24, 39, .9);
   border-color: rgba(148, 163, 184, .18);
 }
@@ -885,7 +1078,8 @@ include __DIR__.'/_sidebar.php';
 }
 
 [data-bs-theme="dark"] .hf-users-card-head h5,
-[data-bs-theme="dark"] .hf-user-name {
+[data-bs-theme="dark"] .hf-user-name,
+[data-bs-theme="dark"] .hf-user-limit-main strong {
   color: #e5e7eb;
 }
 
