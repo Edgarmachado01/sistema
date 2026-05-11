@@ -112,9 +112,9 @@ include __DIR__.'/_site_start.php';
                   </div>
 
                   <div class="col-md-6">
-                    <label class="form-label fw-bold" for="empresa_slug">Codigo da empresa</label>
-                    <input class="form-control form-control-lg" id="empresa_slug" name="empresa_slug" type="text" placeholder="assistencia-pro" autocomplete="organization" value="<?= hfSignupField($oldInput, 'empresa_slug') ?>" required>
-                    <div class="form-text">Esse codigo sera usado no login da sua empresa.</div>
+                    <label class="form-label fw-bold" for="documento">CPF/CNPJ</label>
+                    <input class="form-control form-control-lg" id="documento" name="documento" type="text" maxlength="20" placeholder="Somente numeros" value="<?= hfSignupField($oldInput, 'documento') ?>" required>
+                    <div class="form-text">Usado para validar o cadastro e apoiar a recuperacao do codigo da empresa.</div>
                   </div>
 
                   <div class="col-md-6">
@@ -160,6 +160,7 @@ include __DIR__.'/_site_start.php';
                 <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> sem compromisso</li>
                 <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> acesso imediato</li>
                 <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> dados protegidos</li>
+                <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> codigo da empresa gerado automaticamente</li>
               </ul>
 
               <div class="hf-signup-side-note">

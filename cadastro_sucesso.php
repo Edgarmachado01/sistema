@@ -1,176 +1,178 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
-  session_start();
+    session_start();
 }
 
 $success = $_SESSION['HF_SIGNUP_SUCCESS'] ?? null;
 if (!$success || !is_array($success)) {
-  header('Location: /cadastro.php');
-  exit;
+    header('Location: /cadastro.php');
+    exit;
 }
 
 unset($_SESSION['HF_SIGNUP_SUCCESS']);
 
 $planos = [
-  'basico' => 'Basico',
-  'profissional' => 'Profissional',
-  'premium' => 'Premium',
+    'basico' => 'Basico',
+    'profissional' => 'Profissional',
+    'premium' => 'Premium',
 ];
 
 $empresaNome = trim((string)($success['empresa_nome'] ?? ''));
-$empresaSlug = trim((string)($success['empresa_slug'] ?? ''));
+$tenantCode = trim((string)($success['tenant_code'] ?? ($success['empresa_slug'] ?? '')));
 $email = trim((string)($success['email'] ?? ''));
+$documento = trim((string)($success['documento'] ?? ''));
 $planoKey = strtolower(trim((string)($success['plano'] ?? 'profissional')));
-$planoNome = $planos[$planoKey] ?? 'Profissional';
+$planoNome = trim((string)($success['plano_nome'] ?? ($planos[$planoKey] ?? 'Profissional')));
+$trialDays = (int)($success['trial_days'] ?? 0);
+$trialEndAt = trim((string)($success['trial_end_at'] ?? ''));
+$loginUrl = trim((string)($success['login_url'] ?? '/login.php'));
 
-$siteTitle = 'Teste gratis criado - HelpDesk Facil';
-$siteDescription = 'Seu teste gratis do HelpDesk Facil foi criado com sucesso.';
+if ($loginUrl === '') {
+    $loginUrl = '/login.php';
+}
+
+$trialResumo = $trialDays > 0 ? 'Teste gratis de '.$trialDays.' dias' : 'Teste gratis ativo';
+$trialEndLabel = '';
+
+if ($trialEndAt !== '') {
+    try {
+        $trialEndDate = new DateTime($trialEndAt);
+        $trialEndLabel = $trialEndDate->format('d/m/Y');
+    } catch (Exception $e) {
+        $trialEndLabel = '';
+    }
+}
+
+if ($trialEndLabel !== '') {
+    $trialResumo .= ' (ate '.$trialEndLabel.')';
+}
+
+$siteTitle = 'Cadastro concluido - HelpDesk Facil';
+$siteDescription = 'Seu ambiente foi criado com sucesso. Use os dados abaixo para entrar no login.';
 $siteBodyClass = 'hf-signup-success-page';
-$whatsappUrl = 'https://wa.me/5500000000000?text=Meu%20teste%20gratis%20do%20HelpDesk%20Facil%20foi%20criado';
 
 include __DIR__.'/_site_start.php';
 ?>
-    <section class="hf-hero">
-      <div class="container">
-        <div class="hf-hero-grid">
-          <div>
-            <span class="hf-section-kicker">
-              <i class="bi bi-check-circle" aria-hidden="true"></i>
-              Teste criado
-            </span>
-
-            <h1 class="hf-hero-title">Seu ambiente est&aacute; pronto.</h1>
-
-            <p class="hf-hero-text">
-              Use o c&oacute;digo da empresa, e-mail e senha cadastrados para acessar o painel do HelpDesk Facil.
-            </p>
-
-            <div class="hf-hero-actions">
-              <a class="btn btn-primary hf-btn-primary" href="/login.php">
-                Ir para login
-                <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
-              </a>
-              <a class="btn hf-btn-whatsapp" href="<?= htmlspecialchars($whatsappUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener">
-                <i class="bi bi-whatsapp" aria-hidden="true"></i>
-                Falar no WhatsApp
-              </a>
-            </div>
-
-            <div class="hf-hero-proof" aria-label="Dados de acesso">
-              <span><i class="bi bi-building-check" aria-hidden="true"></i> Empresa criada</span>
-              <span><i class="bi bi-person-check" aria-hidden="true"></i> Administrador ativo</span>
-              <span><i class="bi bi-shield-check" aria-hidden="true"></i> Dados por tenant</span>
-            </div>
-          </div>
-
-          <div class="hf-hero-visual" aria-label="Resumo do cadastro criado">
-            <div class="hf-hero-visual-bar">
-              <div class="hf-window-controls">
-                <span class="hf-hero-dot"></span>
-                <span class="hf-hero-dot"></span>
-                <span class="hf-hero-dot"></span>
-              </div>
-              <div class="hf-app-pill">
-                <i class="bi bi-shield-check" aria-hidden="true"></i>
-                login.helpdeskfacil.com
-              </div>
-              <span class="hf-live-badge">Pronto</span>
-            </div>
-
-            <div class="hf-hero-visual-body">
-              <div class="hf-product-shell">
-                <aside class="hf-product-sidebar" aria-hidden="true">
-                  <div class="hf-product-mark"></div>
-                  <span class="is-active"><i class="bi bi-check2-circle"></i></span>
-                  <span><i class="bi bi-building"></i></span>
-                  <span><i class="bi bi-person-lock"></i></span>
-                  <span><i class="bi bi-box-arrow-in-right"></i></span>
-                </aside>
-
-                <div class="hf-product-main">
-                  <div class="hf-product-head">
+<section class="py-5">
+    <div class="container" style="max-width: 860px;">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-lg-5">
+                <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
                     <div>
-                      <p>Cadastro finalizado</p>
-                      <h2>Acesso liberado</h2>
+                        <span class="badge text-bg-success mb-2">Cadastro concluido</span>
+                        <h1 class="h3 mb-2">Seu ambiente esta pronto para acesso</h1>
+                        <p class="text-secondary mb-0">Guarde estes dados para o primeiro login da empresa.</p>
                     </div>
-                    <span class="hf-status-pill"><i class="bi bi-stars" aria-hidden="true"></i> Plano <?= htmlspecialchars($planoNome, ENT_QUOTES, 'UTF-8') ?></span>
-                  </div>
-
-                  <div class="hf-panel-card">
-                    <div class="hf-panel-head">
-                      <h3>Dados para login</h3>
-                      <span>Guarde estes dados</span>
-                    </div>
-
-                    <div class="hf-os-list">
-                      <div class="hf-os-row">
-                        <span class="hf-os-icon bg-blue"><i class="bi bi-building"></i></span>
-                        <div>
-                          <strong><?= htmlspecialchars($empresaNome, ENT_QUOTES, 'UTF-8') ?></strong>
-                          <small>Nome da empresa</small>
-                        </div>
-                        <span class="hf-tag tag-primary">Empresa</span>
-                      </div>
-                      <div class="hf-os-row">
-                        <span class="hf-os-icon bg-green"><i class="bi bi-key"></i></span>
-                        <div>
-                          <strong><?= htmlspecialchars($empresaSlug, ENT_QUOTES, 'UTF-8') ?></strong>
-                          <small>Codigo da empresa</small>
-                        </div>
-                        <span class="hf-tag tag-success">Codigo</span>
-                      </div>
-                      <div class="hf-os-row">
-                        <span class="hf-os-icon bg-purple"><i class="bi bi-envelope"></i></span>
-                        <div>
-                          <strong><?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8') ?></strong>
-                          <small>E-mail do administrador</small>
-                        </div>
-                        <span class="hf-tag tag-warning">Admin</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="hf-panel-card mt-3">
-                    <div class="d-flex gap-3">
-                      <span class="hf-card-icon mb-0"><i class="bi bi-info-circle" aria-hidden="true"></i></span>
-                      <div>
-                        <h3 class="h6 fw-bold mb-1">Como acessar</h3>
-                        <p class="text-secondary mb-0">No login, informe o c&oacute;digo da empresa, o e-mail do administrador e a senha cadastrada. A senha n&atilde;o &eacute; exibida por seguran&ccedil;a.</p>
-                      </div>
-                    </div>
-                  </div>
+                    <a class="btn btn-primary" href="/login.php">
+                        <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>
+                        Ir para login
+                    </a>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <section class="hf-section-tight">
-      <div class="container">
-        <div class="hf-cta-band">
-          <div class="row align-items-center g-4">
-            <div class="col-lg-8">
-              <span class="hf-section-kicker">Pr&oacute;ximo passo</span>
-              <h2 class="h1 fw-bold mb-3">Entre no painel e comece a cadastrar suas OS.</h2>
-              <p class="mb-0 text-secondary fs-5">A partir de agora, sua empresa j&aacute; pode acessar o HelpDesk Facil usando os dados criados no teste gr&aacute;tis.</p>
-            </div>
-            <div class="col-lg-4">
-              <div class="d-grid">
-                <a class="btn btn-primary hf-btn-primary" href="/login.php">
-                  Ir para login
-                  <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+                <div class="alert alert-light border mb-4">
+                    <div class="small text-uppercase text-secondary fw-semibold mb-1">Empresa</div>
+                    <div class="fw-semibold"><?= htmlspecialchars($empresaNome, ENT_QUOTES, 'UTF-8') ?></div>
+                </div>
 
-    <a class="hf-floating-whatsapp" href="<?= htmlspecialchars($whatsappUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
-      <i class="bi bi-whatsapp" aria-hidden="true"></i>
-      <span>WhatsApp</span>
-    </a>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <tbody>
+                            <tr>
+                                <th scope="row" class="text-secondary fw-semibold" style="width: 220px;">URL de acesso</th>
+                                <td>
+                                    <a href="<?= htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8') ?></a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row" class="text-secondary fw-semibold">Codigo da empresa</th>
+                                <td>
+                                    <div class="d-flex flex-wrap align-items-center gap-2">
+                                        <code id="tenantCodeValue" class="fs-6"><?= htmlspecialchars($tenantCode, ENT_QUOTES, 'UTF-8') ?></code>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="copyTenantCodeBtn" data-tenant-code="<?= htmlspecialchars($tenantCode, ENT_QUOTES, 'UTF-8') ?>">
+                                            <i class="bi bi-clipboard me-1" aria-hidden="true"></i>
+                                            Copiar codigo
+                                        </button>
+                                        <span id="copyTenantCodeFeedback" class="small text-success d-none">Codigo copiado</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row" class="text-secondary fw-semibold">E-mail do acesso</th>
+                                <td><?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8') ?></td>
+                            </tr>
+                            <?php if ($documento !== ''): ?>
+                                <tr>
+                                    <th scope="row" class="text-secondary fw-semibold">CPF/CNPJ</th>
+                                    <td><?= htmlspecialchars($documento, ENT_QUOTES, 'UTF-8') ?></td>
+                                </tr>
+                            <?php endif; ?>
+                            <tr>
+                                <th scope="row" class="text-secondary fw-semibold">Plano e trial</th>
+                                <td><?= htmlspecialchars($planoNome.' - '.$trialResumo, ENT_QUOTES, 'UTF-8') ?></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 pt-3 border-top">
+                    <h2 class="h6 fw-bold mb-2">Como entrar</h2>
+                    <p class="text-secondary mb-0">Na tela de login, informe o codigo da empresa, o e-mail e a senha definidos no cadastro.</p>
+                    <p class="text-secondary mb-0 mt-2">Em breve, o codigo da empresa tambem sera enviado por e-mail automaticamente. Nesta fase, guarde este codigo em local seguro.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+(function () {
+    var copyBtn = document.getElementById('copyTenantCodeBtn');
+    var feedback = document.getElementById('copyTenantCodeFeedback');
+    if (!copyBtn || !feedback) {
+        return;
+    }
+
+    copyBtn.addEventListener('click', function () {
+        var tenantCode = copyBtn.getAttribute('data-tenant-code') || '';
+        if (!tenantCode) {
+            return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(tenantCode).then(showFeedback).catch(function () {
+                fallbackCopy(tenantCode);
+            });
+            return;
+        }
+
+        fallbackCopy(tenantCode);
+    });
+
+    function fallbackCopy(text) {
+        var textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.setAttribute('readonly', 'readonly');
+        textArea.style.position = 'absolute';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+
+        try {
+            document.execCommand('copy');
+            showFeedback();
+        } catch (e) {
+            // Sem acao adicional: mantem fluxo sem quebrar a pagina.
+        }
+
+        document.body.removeChild(textArea);
+    }
+
+    function showFeedback() {
+        feedback.classList.remove('d-none');
+        window.setTimeout(function () {
+            feedback.classList.add('d-none');
+        }, 2000);
+    }
+})();
+</script>
 <?php include __DIR__.'/_site_end.php'; ?>

@@ -29,7 +29,7 @@ function hfSignupOldInput($data)
         'responsavel_nome' => trim((string)($data['responsavel_nome'] ?? '')),
         'email'            => trim((string)($data['email'] ?? '')),
         'whatsapp'         => trim((string)($data['whatsapp'] ?? '')),
-        'empresa_slug'     => trim((string)($data['empresa_slug'] ?? '')),
+        'documento'        => trim((string)($data['documento'] ?? '')),
         'plano'            => hfSignupPlanoSeguro($data['plano'] ?? 'profissional'),
     ];
 }
@@ -101,6 +101,101 @@ function hfSignupValidarCsrf()
         && hash_equals($sessionToken, $postToken);
 }
 
+function hfSignupNormalizeDocumento($value)
+{
+    return preg_replace('/\D+/', '', trim((string)$value));
+}
+
+function hfSignupDocumentoValido($documento)
+{
+    $len = strlen((string)$documento);
+    return $len === 11 || $len === 14;
+}
+
+function hfSignupSlugExiste(PDO $pdo, $slug)
+{
+    $st = $pdo->prepare('SELECT id FROM tenants WHERE slug = ? LIMIT 1');
+    $st->execute([$slug]);
+    return (bool)$st->fetchColumn();
+}
+
+function hfSignupBuildCandidateSlug($base, $suffix = '')
+{
+    $base = trim((string)$base, '-');
+    $suffix = trim((string)$suffix, '-');
+
+    if ($base === '') {
+        $base = 'empresa';
+    }
+
+    if ($suffix === '') {
+        return substr($base, 0, 40);
+    }
+
+    $maxBaseLen = 40 - (strlen($suffix) + 1);
+    if ($maxBaseLen < 3) {
+        $maxBaseLen = 3;
+    }
+
+    $baseCut = substr($base, 0, $maxBaseLen);
+    $baseCut = rtrim($baseCut, '-');
+    if ($baseCut === '') {
+        $baseCut = 'emp';
+    }
+
+    return $baseCut.'-'.$suffix;
+}
+
+function hfSignupGenerateTenantCode(PDO $pdo, $empresaNome)
+{
+    $base = hfSignupNormalizeSlug((string)$empresaNome);
+    if ($base === '') {
+        $base = 'empresa';
+    }
+    $base = substr($base, 0, 30);
+    $base = trim($base, '-');
+
+    for ($i = 0; $i < 25; $i++) {
+        $suffix = '';
+        if ($i > 0) {
+            $suffix = bin2hex(random_bytes(2));
+        }
+
+        $candidate = hfSignupBuildCandidateSlug($base, $suffix);
+        if ($candidate === '' || strlen($candidate) < 3 || hfSignupSlugReservado($candidate)) {
+            continue;
+        }
+
+        if (!hfSignupSlugExiste($pdo, $candidate)) {
+            return $candidate;
+        }
+    }
+
+    throw new RuntimeException('Nao foi possivel gerar um codigo de empresa disponivel.');
+}
+
+function hfSignupBuildLoginUrl()
+{
+    $host = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '') {
+        return '/login.php';
+    }
+
+    $scheme = 'http';
+    $forwardedProto = trim((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ($forwardedProto !== '') {
+        $scheme = strtolower(explode(',', $forwardedProto)[0]);
+    } elseif (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') {
+        $scheme = 'https';
+    }
+
+    if ($scheme !== 'http' && $scheme !== 'https') {
+        $scheme = 'https';
+    }
+
+    return $scheme.'://'.$host.'/login.php';
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /cadastro.php');
     exit;
@@ -114,7 +209,7 @@ $empresaNome = trim((string)($_POST['empresa_nome'] ?? ''));
 $responsavelNome = trim((string)($_POST['responsavel_nome'] ?? ''));
 $email = strtolower(trim((string)($_POST['email'] ?? '')));
 $whatsapp = trim((string)($_POST['whatsapp'] ?? ''));
-$slugInformado = trim((string)($_POST['empresa_slug'] ?? ''));
+$documento = hfSignupNormalizeDocumento($_POST['documento'] ?? '');
 $senha = (string)($_POST['senha'] ?? '');
 $senhaConfirmar = (string)($_POST['senha_confirmar'] ?? '');
 $planoRecebido = strtolower(trim((string)($_POST['plano'] ?? '')));
@@ -125,7 +220,7 @@ $oldInput = hfSignupOldInput([
     'responsavel_nome' => $responsavelNome,
     'email' => $email,
     'whatsapp' => $whatsapp,
-    'empresa_slug' => $slugInformado,
+    'documento' => $documento,
     'plano' => $plano,
 ]);
 
@@ -145,19 +240,12 @@ if ($whatsapp === '') {
     hfSignupRedirectError('Informe o WhatsApp da empresa.', $oldInput);
 }
 
+if (!hfSignupDocumentoValido($documento)) {
+    hfSignupRedirectError('Informe um CPF ou CNPJ valido (somente numeros).', $oldInput);
+}
+
 if (!hfSignupPlanoValido($planoRecebido)) {
     hfSignupRedirectError('Escolha um plano valido para iniciar o teste gratis.', $oldInput);
-}
-
-$slug = hfSignupNormalizeSlug($slugInformado);
-$oldInput['empresa_slug'] = $slug;
-
-if ($slug === '' || strlen($slug) < 3 || strlen($slug) > 40) {
-    hfSignupRedirectError('Informe um codigo de empresa valido, com 3 a 40 caracteres.', $oldInput);
-}
-
-if (hfSignupSlugReservado($slug)) {
-    hfSignupRedirectError('Este codigo de empresa nao pode ser usado. Escolha outro.', $oldInput);
 }
 
 if ($senha === '' || strlen($senha) < 8) {
@@ -172,12 +260,6 @@ $userFriendlyError = 'Nao foi possivel criar o teste gratis. Revise os dados e t
 
 try {
     $pdo = db();
-
-    $stSlug = $pdo->prepare('SELECT id FROM tenants WHERE slug = ? LIMIT 1');
-    $stSlug->execute([$slug]);
-    if ($stSlug->fetchColumn()) {
-        hfSignupRedirectError('Este codigo de empresa ja esta em uso. Escolha outro.', $oldInput);
-    }
 
     $pdo->beginTransaction();
 
@@ -208,6 +290,8 @@ try {
     if ($trialDays <= 0) {
         $trialDays = 14;
     }
+
+    $slug = hfSignupGenerateTenantCode($pdo, $empresaNome);
 
     $sqlTenant = "
         INSERT INTO tenants (
@@ -312,7 +396,7 @@ try {
             :tenant_id,
             :razao_social,
             :nome_fantasia,
-            '',
+            :cnpj,
             '',
             '',
             :telefone,
@@ -346,6 +430,7 @@ try {
         ':tenant_id' => $tenantId,
         ':razao_social' => $empresaNome,
         ':nome_fantasia' => $empresaNome,
+        ':cnpj' => $documento,
         ':telefone' => $whatsapp,
         ':whatsapp' => $whatsapp,
         ':email' => $email,
@@ -411,12 +496,16 @@ try {
     $_SESSION['HF_SIGNUP_SUCCESS'] = [
         'empresa_nome' => $empresaNome,
         'empresa_slug' => $slug,
+        'tenant_code' => $slug,
         'responsavel_nome' => $responsavelNome,
         'email' => $email,
+        'documento' => $documento,
         'plano' => $plano,
         'plano_nome' => $planName !== '' ? $planName : ucfirst($plano),
+        'trial_status' => 'trial',
         'trial_days' => $trialDays,
         'trial_end_at' => $trialEndAt,
+        'login_url' => hfSignupBuildLoginUrl(),
     ];
     unset($_SESSION['HF_SIGNUP_ERROR'], $_SESSION['HF_SIGNUP_OLD']);
 
@@ -431,7 +520,7 @@ try {
 
     $msg = $e->getMessage();
     if (stripos($msg, 'duplicate') !== false || stripos($msg, 'uq') !== false || stripos($msg, 'slug') !== false) {
-        hfSignupRedirectError('Este codigo de empresa ja esta em uso. Escolha outro.', $oldInput);
+        hfSignupRedirectError('Nao foi possivel gerar um codigo de empresa disponivel agora. Tente novamente.', $oldInput);
     }
 
     hfSignupRedirectError($userFriendlyError, $oldInput);
