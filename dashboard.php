@@ -325,6 +325,7 @@ if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
                 $planName = trim((string)($planUsage['plan_code'] ?? 'Plano'));
             }
 
+            $planCode = trim((string)($planUsage['plan_code'] ?? ''));
             $statusKey = (string)($planUsage['subscription_status'] ?? '');
             $statusLabels = [
                 'trial' => 'Trial',
@@ -333,6 +334,9 @@ if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
                 'bloqueado' => 'Bloqueado',
                 'cancelado' => 'Cancelado',
             ];
+            if ($planCode === 'cortesia') {
+                $statusLabels['ativo'] = 'Cortesia';
+            }
 
             $userLimit = (int)($planUsage['user_limit'] ?? 0);
             $osLimit = (int)($planUsage['monthly_os_limit'] ?? 0);
@@ -348,8 +352,20 @@ if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
                 }
             }
 
+            $periodEndText = '';
+            if (!empty($planUsage['current_period_end'])) {
+                $periodEndTs = strtotime((string)$planUsage['current_period_end']);
+                if ($periodEndTs) {
+                    $periodEndText = 'Vencimento em '.date('d/m/Y', $periodEndTs).'.';
+                }
+            }
+
+            $needsBillingAction = in_array($statusKey, ['vencido', 'bloqueado', 'cancelado'], true);
+
             $planUsageCard = [
                 'plan_name' => $planName,
+                'plan_code' => $planCode,
+                'status_key' => $statusKey,
                 'status' => $statusLabels[$statusKey] ?? ($statusKey !== '' ? ucfirst($statusKey) : 'Sem status'),
                 'active_users' => (int)($planUsage['active_users'] ?? 0),
                 'user_limit' => $userLimit,
@@ -363,6 +379,8 @@ if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
                 'is_near_os_limit' => !empty($planUsage['is_near_os_limit']),
                 'is_trial' => !empty($planUsage['is_trial']),
                 'trial_text' => $trialText,
+                'period_end_text' => $periodEndText,
+                'needs_billing_action' => $needsBillingAction,
             ];
         }
     } catch (Exception $e) {
@@ -590,7 +608,17 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
             <span class="hf-plan-usage-kicker">Uso do plano</span>
             <h5><?= htmlspecialchars($planUsageCard['plan_name'], ENT_QUOTES, 'UTF-8') ?></h5>
           </div>
-          <span class="hf-plan-status <?= $planUsageCard['is_trial'] ? 'is-trial' : '' ?>">
+          <?php
+            $planStatusClass = '';
+            if ($planUsageCard['is_trial']) {
+                $planStatusClass = 'is-trial';
+            } elseif (in_array((string)($planUsageCard['status_key'] ?? ''), ['vencido', 'bloqueado', 'cancelado'], true)) {
+                $planStatusClass = 'is-critical';
+            } elseif ((string)($planUsageCard['plan_code'] ?? '') === 'cortesia') {
+                $planStatusClass = 'is-cortesia';
+            }
+          ?>
+          <span class="hf-plan-status <?= $planStatusClass ?>">
             <?= htmlspecialchars($planUsageCard['status'], ENT_QUOTES, 'UTF-8') ?>
           </span>
         </div>
@@ -599,6 +627,20 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
           <div class="hf-plan-trial-note">
             <i class="bi bi-clock-history" aria-hidden="true"></i>
             <?= htmlspecialchars($planUsageCard['trial_text'], ENT_QUOTES, 'UTF-8') ?>
+          </div>
+        <?php endif; ?>
+
+        <?php if ($planUsageCard['period_end_text'] !== ''): ?>
+          <div class="hf-plan-trial-note">
+            <i class="bi bi-calendar-event" aria-hidden="true"></i>
+            <?= htmlspecialchars($planUsageCard['period_end_text'], ENT_QUOTES, 'UTF-8') ?>
+          </div>
+        <?php endif; ?>
+
+        <?php if ($planUsageCard['needs_billing_action']): ?>
+          <div class="hf-plan-billing-cta">
+            <span>Assinatura com pendencia comercial. Regularize no billing para manter o acesso.</span>
+            <a class="btn btn-sm btn-warning" href="/billing.php">Ir para Billing</a>
           </div>
         <?php endif; ?>
 
@@ -720,7 +762,7 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
         <section class="hf-card hf-attention-card">
           <div class="hf-card-head">
             <div>
-              <h5>Atenção agora</h5>
+              <h5>Atencao agora</h5>
               <p>Itens que merecem acompanhamento operacional.</p>
             </div>
             <?php if ($metrics['os_antigas'] > 0): ?>
@@ -730,7 +772,7 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
 
           <div class="hf-attention-grid">
             <div>
-              <h6>OS abertas há mais tempo</h6>
+              <h6>OS abertas ha mais tempo</h6>
               <?php if ($attentionOs): ?>
                 <div class="hf-attention-list">
                   <?php foreach ($attentionOs as $row): ?>
@@ -753,7 +795,7 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
             </div>
 
             <div>
-              <h6>Pendências financeiras</h6>
+              <h6>Pendencias financeiras</h6>
               <?php if (!$isAtendenteOnly && $attentionFinance): ?>
                 <div class="hf-attention-list">
                   <?php foreach ($attentionFinance as $row): ?>
@@ -788,8 +830,8 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
         <section class="hf-card hf-shortcuts-card">
           <div class="hf-card-head">
             <div>
-              <h5>Atalhos rápidos</h5>
-              <p>Ações frequentes para ganhar tempo.</p>
+              <h5>Atalhos rapidos</h5>
+              <p>Acoes frequentes para ganhar tempo.</p>
             </div>
           </div>
 
@@ -1143,6 +1185,16 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
   background: rgba(14, 165, 233, .13);
 }
 
+.hf-plan-status.is-cortesia {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, .14);
+}
+
+.hf-plan-status.is-critical {
+  color: #991b1b;
+  background: rgba(239, 68, 68, .16);
+}
+
 .hf-plan-trial-note {
   grid-column: 1 / -1;
   display: inline-flex;
@@ -1152,6 +1204,28 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
   color: #475569;
   font-size: .86rem;
   font-weight: 650;
+}
+
+.hf-plan-billing-cta {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-top: .35rem;
+  padding: .72rem .8rem;
+  border: 1px solid rgba(245, 158, 11, .34);
+  border-radius: .85rem;
+  background: rgba(255, 251, 235, .92);
+  color: #92400e;
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+.hf-plan-billing-cta .btn {
+  flex: 0 0 auto;
+  border-radius: .65rem;
+  font-weight: 800;
 }
 
 .hf-plan-usage-grid {
@@ -1562,6 +1636,12 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
 [data-bs-theme="dark"] .hf-shortcut-grid a {
   background: rgba(15, 23, 42, .72);
   border-color: rgba(148, 163, 184, .18);
+}
+
+[data-bs-theme="dark"] .hf-plan-billing-cta {
+  background: rgba(120, 53, 15, .32);
+  border-color: rgba(245, 158, 11, .42);
+  color: #fde68a;
 }
 </style>
 
