@@ -91,6 +91,44 @@ if (!function_exists('hfAdminSubPickColumn')) {
     }
 }
 
+if (!function_exists('hfAdminSubCycleLabel')) {
+    function hfAdminSubCycleLabel($periodStart, $periodEnd, $status, $planCode)
+    {
+        $planCode = trim((string)$planCode);
+        $status = trim((string)$status);
+
+        if ($planCode === 'cortesia') {
+            return 'Cortesia';
+        }
+
+        if ($status === 'trial') {
+            return 'Trial';
+        }
+
+        if (!$periodStart || !$periodEnd) {
+            return 'Mensal';
+        }
+
+        try {
+            $start = new DateTime((string)$periodStart);
+            $end = new DateTime((string)$periodEnd);
+            $days = (int)$start->diff($end)->format('%a');
+            return $days >= 330 ? 'Anual' : 'Mensal';
+        } catch (Exception $e) {
+            return 'Mensal';
+        }
+    }
+}
+
+if (empty($_SESSION['SAAS_ADMIN_SUBS_CSRF'])) {
+    $_SESSION['SAAS_ADMIN_SUBS_CSRF'] = bin2hex(random_bytes(32));
+}
+$csrfToken = (string)$_SESSION['SAAS_ADMIN_SUBS_CSRF'];
+
+$flashSuccess = (string)($_SESSION['SAAS_ADMIN_FLASH_SUCCESS'] ?? '');
+$flashError = (string)($_SESSION['SAAS_ADMIN_FLASH_ERROR'] ?? '');
+unset($_SESSION['SAAS_ADMIN_FLASH_SUCCESS'], $_SESSION['SAAS_ADMIN_FLASH_ERROR']);
+
 $q = trim((string)($_GET['q'] ?? ''));
 $plan = trim((string)($_GET['plan'] ?? ''));
 $status = trim((string)($_GET['status'] ?? ''));
@@ -103,6 +141,88 @@ if (!in_array($status, $allowedStatuses, true)) {
 }
 if (!in_array($filter, $allowedFilters, true)) {
     $filter = '';
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = trim((string)($_POST['action'] ?? ''));
+    if ($action === 'confirm_payment') {
+        $sessionToken = (string)($_SESSION['SAAS_ADMIN_SUBS_CSRF'] ?? '');
+        $postToken = (string)($_POST['csrf_token'] ?? '');
+
+        if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+            $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Sessao expirada. Recarregue e tente novamente.';
+            header('Location: /admin_subscriptions.php');
+            exit;
+        }
+
+        $tenantId = (int)($_POST['tenant_id'] ?? 0);
+        $billingCycle = trim((string)($_POST['billing_cycle'] ?? 'mensal'));
+        if ($tenantId <= 0 || !in_array($billingCycle, ['mensal', 'anual'], true)) {
+            $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Dados de confirmacao invalidos.';
+            header('Location: /admin_subscriptions.php');
+            exit;
+        }
+
+        try {
+            $stmtCurrent = $pdo->prepare("
+                SELECT ts.id, p.code AS plan_code
+                FROM tenant_subscriptions ts
+                JOIN plans p ON p.id = ts.plan_id
+                WHERE ts.tenant_id = :tenant_id
+                ORDER BY ts.id DESC
+                LIMIT 1
+            ");
+            $stmtCurrent->execute([':tenant_id' => $tenantId]);
+            $current = $stmtCurrent->fetch(PDO::FETCH_ASSOC) ?: null;
+
+            if (!$current) {
+                $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Assinatura nao encontrada para esta empresa.';
+                header('Location: /admin_subscriptions.php');
+                exit;
+            }
+
+            if ((string)($current['plan_code'] ?? '') === 'cortesia') {
+                $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Plano cortesia nao precisa de confirmacao de pagamento.';
+                header('Location: /admin_subscriptions.php');
+                exit;
+            }
+
+            $periodStart = new DateTime();
+            $periodEnd = clone $periodStart;
+            if ($billingCycle === 'anual') {
+                $periodEnd->add(new DateInterval('P365D'));
+            } else {
+                $periodEnd->add(new DateInterval('P30D'));
+            }
+
+            $stmtUpdate = $pdo->prepare("
+                UPDATE tenant_subscriptions
+                SET status = 'ativo',
+                    current_period_start = :period_start,
+                    current_period_end = :period_end,
+                    blocked_at = NULL,
+                    cancelled_at = NULL,
+                    updated_at = NOW()
+                WHERE id = :id
+                  AND tenant_id = :tenant_id
+            ");
+            $stmtUpdate->execute([
+                ':period_start' => $periodStart->format('Y-m-d H:i:s'),
+                ':period_end' => $periodEnd->format('Y-m-d H:i:s'),
+                ':id' => (int)$current['id'],
+                ':tenant_id' => $tenantId,
+            ]);
+
+            $_SESSION['SAAS_ADMIN_FLASH_SUCCESS'] = 'Pagamento confirmado com sucesso.';
+            header('Location: /admin_subscriptions.php');
+            exit;
+        } catch (Exception $e) {
+            error_log('admin_subscriptions.php confirm_payment: '.$e->getMessage());
+            $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Nao foi possivel confirmar o pagamento agora.';
+            header('Location: /admin_subscriptions.php');
+            exit;
+        }
+    }
 }
 
 $latestSubscriptionSql = "
@@ -126,7 +246,6 @@ $metrics = [
     'potential_mrr_cents' => 0,
 ];
 $subscriptions = [];
-$flashError = '';
 
 try {
     $plans = hfAdminSubRows($pdo, "
@@ -244,6 +363,7 @@ try {
             ts.status,
             ts.trial_start_at,
             ts.trial_end_at,
+            ts.current_period_start,
             ts.current_period_end,
             (
                 SELECT COUNT(*)
@@ -343,6 +463,27 @@ require_once __DIR__.'/_admin_layout_start.php';
     background: rgba(13, 110, 253, .07);
   }
 
+  .hf-sub-actions {
+    display: inline-flex;
+    flex-direction: column;
+    gap: .45rem;
+    align-items: flex-end;
+  }
+
+  .hf-sub-confirm-form {
+    display: inline-flex;
+    gap: .35rem;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .hf-sub-confirm-form .form-select {
+    min-width: 110px;
+    font-size: .76rem;
+    padding-top: .26rem;
+    padding-bottom: .26rem;
+  }
+
   @media (max-width: 1160px) {
     .hf-admin-sub-filter-grid {
       grid-template-columns: 1fr 1fr 1fr;
@@ -373,6 +514,12 @@ require_once __DIR__.'/_admin_layout_start.php';
   <?php if ($flashError): ?>
     <div class="alert alert-danger border-0 shadow-sm mb-0">
       <i class="bi bi-exclamation-triangle me-1"></i><?= htmlspecialchars($flashError, ENT_QUOTES, 'UTF-8') ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($flashSuccess): ?>
+    <div class="alert alert-success border-0 shadow-sm mb-0">
+      <i class="bi bi-check2-circle me-1"></i><?= htmlspecialchars($flashSuccess, ENT_QUOTES, 'UTF-8') ?>
     </div>
   <?php endif; ?>
 
@@ -486,7 +633,9 @@ require_once __DIR__.'/_admin_layout_start.php';
             <th>Inicio trial</th>
             <th>Fim trial</th>
             <th>Fim periodo</th>
+            <th>Ciclo</th>
             <th class="text-end">Valor mensal</th>
+            <th class="text-end">Valor anual</th>
             <th class="text-end">Usuarios</th>
             <th class="text-end">OS mes</th>
             <th class="text-end">Acoes</th>
@@ -495,7 +644,7 @@ require_once __DIR__.'/_admin_layout_start.php';
         <tbody>
           <?php if (!$subscriptions): ?>
             <tr>
-              <td colspan="10" class="text-center text-muted py-4">Nenhuma assinatura encontrada.</td>
+              <td colspan="12" class="text-center text-muted py-4">Nenhuma assinatura encontrada.</td>
             </tr>
           <?php endif; ?>
 
@@ -506,6 +655,14 @@ require_once __DIR__.'/_admin_layout_start.php';
               $statusValue = trim((string)($item['status'] ?? ''));
               $planCode = trim((string)($item['plan_code'] ?? ''));
               $isCortesia = $planCode === 'cortesia';
+              $monthlyCents = (int)($item['monthly_price_cents'] ?? 0);
+              $annualCents = $monthlyCents > 0 ? ($monthlyCents * 10) : 0;
+              $cycleLabel = hfAdminSubCycleLabel(
+                  $item['current_period_start'] ?? null,
+                  $item['current_period_end'] ?? null,
+                  $statusValue,
+                  $planCode
+              );
             ?>
             <tr>
               <td>
@@ -531,13 +688,31 @@ require_once __DIR__.'/_admin_layout_start.php';
               <td><?= htmlspecialchars(hfAdminSubDate($item['trial_start_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
               <td><?= htmlspecialchars($isCortesia ? '-' : hfAdminSubDate($item['trial_end_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
               <td><?= htmlspecialchars($isCortesia ? '-' : hfAdminSubDate($item['current_period_end'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
-              <td class="text-end fw-bold"><?= htmlspecialchars(hfAdminSubMoney($item['monthly_price_cents'] ?? 0), ENT_QUOTES, 'UTF-8') ?></td>
+              <td><?= htmlspecialchars($cycleLabel, ENT_QUOTES, 'UTF-8') ?></td>
+              <td class="text-end fw-bold"><?= htmlspecialchars(hfAdminSubMoney($monthlyCents), ENT_QUOTES, 'UTF-8') ?></td>
+              <td class="text-end fw-bold"><?= htmlspecialchars($isCortesia ? '-' : hfAdminSubMoney($annualCents), ENT_QUOTES, 'UTF-8') ?></td>
               <td class="text-end fw-bold"><?= number_format((int)($item['active_users'] ?? 0), 0, ',', '.') ?></td>
               <td class="text-end fw-bold"><?= number_format((int)($item['monthly_os_count'] ?? 0), 0, ',', '.') ?></td>
               <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary" href="/admin_tenant_form.php?id=<?= (int)$item['tenant_id'] ?>">
-                  <i class="bi bi-pencil-square me-1"></i>Editar
-                </a>
+                <div class="hf-sub-actions">
+                  <?php if (!$isCortesia): ?>
+                    <form method="post" class="hf-sub-confirm-form" onsubmit="return confirm('Confirmar pagamento manual desta assinatura?');">
+                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                      <input type="hidden" name="action" value="confirm_payment">
+                      <input type="hidden" name="tenant_id" value="<?= (int)$item['tenant_id'] ?>">
+                      <select class="form-select form-select-sm" name="billing_cycle">
+                        <option value="mensal" <?= $cycleLabel === 'Mensal' ? 'selected' : '' ?>>Mensal</option>
+                        <option value="anual" <?= $cycleLabel === 'Anual' ? 'selected' : '' ?>>Anual</option>
+                      </select>
+                      <button type="submit" class="btn btn-sm btn-success">
+                        <i class="bi bi-check2-circle me-1"></i>Confirmar
+                      </button>
+                    </form>
+                  <?php endif; ?>
+                  <a class="btn btn-sm btn-outline-primary" href="/admin_tenant_form.php?id=<?= (int)$item['tenant_id'] ?>">
+                    <i class="bi bi-pencil-square me-1"></i>Editar
+                  </a>
+                </div>
               </td>
             </tr>
           <?php endforeach; ?>

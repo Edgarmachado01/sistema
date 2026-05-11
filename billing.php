@@ -61,6 +61,36 @@ if (!function_exists('hfBillingLimitText')) {
     }
 }
 
+if (!function_exists('hfBillingCycleLabel')) {
+    function hfBillingCycleLabel($periodStart, $periodEnd, $isTrial, $isCortesia)
+    {
+        if ($isCortesia) {
+            return 'Cortesia';
+        }
+        if ($isTrial) {
+            return 'Trial';
+        }
+
+        if (!$periodStart || !$periodEnd) {
+            return 'Mensal';
+        }
+
+        try {
+            $start = new DateTime((string)$periodStart);
+            $end = new DateTime((string)$periodEnd);
+            $days = (int)$start->diff($end)->format('%a');
+
+            if ($days >= 330) {
+                return 'Anual';
+            }
+
+            return 'Mensal';
+        } catch (Exception $e) {
+            return 'Mensal';
+        }
+    }
+}
+
 try {
     if ($tid > 0) {
         $usage = hfTenantUsage($pdo, $tid);
@@ -114,6 +144,43 @@ $pricingPlans = [
         'features' => ['15 usuarios', '2000 OS por mes', 'Relatorios avancados', 'Branding completo'],
     ],
 ];
+
+$pricingByCode = [];
+foreach ($pricingPlans as $pricingPlan) {
+    $pricingByCode[(string)$pricingPlan['code']] = [
+        'monthly' => (int)($pricingPlan['monthly'] ?? 0),
+        'annual' => (int)($pricingPlan['annual'] ?? 0),
+    ];
+}
+
+$currentPeriodStart = null;
+try {
+    if ($tid > 0) {
+        $stmtBillingSub = $pdo->prepare("
+            SELECT current_period_start
+            FROM tenant_subscriptions
+            WHERE tenant_id = :tenant_id
+            ORDER BY id DESC
+            LIMIT 1
+        ");
+        $stmtBillingSub->execute([':tenant_id' => $tid]);
+        $currentPeriodStart = $stmtBillingSub->fetchColumn() ?: null;
+    }
+} catch (Exception $e) {
+    error_log('billing.php subscription: '.$e->getMessage());
+    $currentPeriodStart = null;
+}
+
+$currentPlanPricing = $pricingByCode[$planCode] ?? ['monthly' => 0, 'annual' => 0];
+$billingCycleLabel = hfBillingCycleLabel(
+    $currentPeriodStart,
+    $usage['current_period_end'] ?? null,
+    $isTrial,
+    $isCortesia
+);
+$referenceAmountCents = $billingCycleLabel === 'Anual'
+    ? (int)$currentPlanPricing['annual']
+    : (int)$currentPlanPricing['monthly'];
 
 $pixKey = 'pix@helpdeskfacil.com.br';
 $whatsappUrl = 'https://wa.me/5500000000000?text=Quero%20enviar%20o%20comprovante%20do%20pagamento%20da%20assinatura';
@@ -261,7 +328,7 @@ include __DIR__.'/_sidebar.php';
 
     .hf-usage-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: .9rem;
     }
 
@@ -480,16 +547,28 @@ include __DIR__.'/_sidebar.php';
 
     <section class="hf-usage-grid">
       <article class="hf-billing-card hf-usage-item">
+        <span>Plano atual</span>
+        <strong><?= htmlspecialchars($planName !== '' ? $planName : 'Sem plano', ENT_QUOTES, 'UTF-8') ?></strong>
+      </article>
+      <article class="hf-billing-card hf-usage-item">
         <span>Status</span>
         <strong><?= htmlspecialchars($isCortesia ? 'Cortesia' : hfBillingStatusLabel($subscriptionStatus), ENT_QUOTES, 'UTF-8') ?></strong>
       </article>
       <article class="hf-billing-card hf-usage-item">
-        <span>Trial termina</span>
-        <strong><?= htmlspecialchars($isCortesia ? '-' : hfBillingDate($usage['trial_end_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></strong>
+        <span>Ciclo</span>
+        <strong><?= htmlspecialchars($billingCycleLabel, ENT_QUOTES, 'UTF-8') ?></strong>
       </article>
       <article class="hf-billing-card hf-usage-item">
         <span>Vencimento</span>
         <strong><?= htmlspecialchars($isCortesia ? '-' : hfBillingDate($usage['current_period_end'] ?? null), ENT_QUOTES, 'UTF-8') ?></strong>
+      </article>
+      <article class="hf-billing-card hf-usage-item">
+        <span>Valor mensal</span>
+        <strong><?= htmlspecialchars($isCortesia ? '-' : hfBillingMoney((int)$currentPlanPricing['monthly']), ENT_QUOTES, 'UTF-8') ?></strong>
+      </article>
+      <article class="hf-billing-card hf-usage-item">
+        <span>Valor anual</span>
+        <strong><?= htmlspecialchars($isCortesia ? '-' : hfBillingMoney((int)$currentPlanPricing['annual']), ENT_QUOTES, 'UTF-8') ?></strong>
       </article>
       <article class="hf-billing-card hf-usage-item">
         <span>Usuarios</span>
@@ -550,6 +629,14 @@ include __DIR__.'/_sidebar.php';
           <div class="text-uppercase fw-bold text-primary small mb-2">PIX manual</div>
           <h2 class="h4 fw-bold mb-2">Pagamento por comprovante</h2>
           <p class="text-muted">Use a chave PIX abaixo e envie o comprovante pelo WhatsApp. A baixa sera feita manualmente pela administracao.</p>
+
+          <?php if (!$isCortesia): ?>
+            <div class="alert alert-light border mb-3">
+              <div class="fw-bold mb-1">Resumo para pagamento</div>
+              <div class="small text-muted">Ciclo atual: <?= htmlspecialchars($billingCycleLabel, ENT_QUOTES, 'UTF-8') ?></div>
+              <div class="small text-muted">Valor de referencia: <?= htmlspecialchars(hfBillingMoney($referenceAmountCents), ENT_QUOTES, 'UTF-8') ?></div>
+            </div>
+          <?php endif; ?>
 
           <div class="hf-pix-key mb-3">
             <i class="bi bi-qr-code" aria-hidden="true"></i>
