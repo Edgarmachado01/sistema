@@ -44,6 +44,20 @@ $fields = [
 $data = [];
 foreach ($fields as $f) $data[$f] = isset($_POST[$f]) ? trim($_POST[$f]) : null;
 
+$telefone = (string)($data['telefone'] ?? '');
+if ($telefone === '') {
+  header('Location: /cliente_form.php'.($id > 0 ? '?id='.$id.'&err=telefone' : '?err=telefone')); exit;
+}
+
+$documentoNumeros = preg_replace('/\D+/', '', (string)($data['documento'] ?? ''));
+if ($documentoNumeros !== '' && !in_array(strlen($documentoNumeros), [11, 14], true)) {
+  header('Location: /cliente_form.php'.($id > 0 ? '?id='.$id.'&err=documento' : '?err=documento')); exit;
+}
+
+if (!empty($data['email']) && !filter_var((string)$data['email'], FILTER_VALIDATE_EMAIL)) {
+  header('Location: /cliente_form.php'.($id > 0 ? '?id='.$id.'&err=email' : '?err=email')); exit;
+}
+
 try{
   if ($id>0) {
     $check = $pdo->prepare("SELECT id FROM hf_clientes WHERE id=:id AND tenant_id=:tid AND deleted_at IS NULL LIMIT 1");

@@ -12,6 +12,22 @@ if (session_status() === PHP_SESSION_NONE) {
 
 $pdo = db();
 
+function osSaveFlash($type, $text) {
+  if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+  }
+  if (!isset($_SESSION['HF_GLOBAL_FEEDBACK']) || !is_array($_SESSION['HF_GLOBAL_FEEDBACK'])) {
+    $_SESSION['HF_GLOBAL_FEEDBACK'] = [];
+  }
+  $_SESSION['HF_GLOBAL_FEEDBACK'][] = ['type' => $type, 'text' => $text];
+}
+
+function osSaveBackToForm($id, $msg = '') {
+  if ($msg !== '') osSaveFlash('danger', $msg);
+  header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
+  exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   header('Location: /os_list.php');
   exit;
@@ -23,6 +39,7 @@ $postToken    = $_POST['csrf_token'] ?? '';
 
 if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
   error_log('os_save.php csrf invalido user=' . ($_SESSION['USER_ID'] ?? ''));
+  osSaveFlash('danger', 'Sessao expirada. Recarregue a tela e tente novamente.');
   header('Location: /os_list.php');
   exit;
 }
@@ -133,7 +150,11 @@ $status_financeiro = trim((string)($_POST['status_financeiro'] ?? 'pendente'));
 $valor_pago        = brToFloat($_POST['valor_pago'] ?? 0);
 $data_pagto_raw    = trim((string)($_POST['data_pagto'] ?? ''));
 
-if ($id < 0) { header('Location: /os_list.php'); exit; }
+if ($id < 0) {
+  osSaveFlash('danger', 'OS invalida para salvamento.');
+  header('Location: /os_list.php');
+  exit;
+}
 if ($garantia_dias < 0) { $garantia_dias = 0; }
 if ($status === '') { $status = 'aberta'; }
 if ($prioridade === '') { $prioridade = 'baixa'; }
@@ -149,23 +170,13 @@ if ($status_financeiro === '') {
 }
 
 $status_financeiro = strtolower($status_financeiro);
-
-if ($status_financeiro === 'pago') {
-  if ($valor_pago <= 0 && $total > 0) {
-    $valor_pago = $total;
-  }
-  if ($data_pagto_raw === '') {
-    $data_pagto = date('Y-m-d');
-  } else {
-    $data_pagto = $data_pagto_raw;
-  }
-} else {
-  $data_pagto = ($data_pagto_raw !== '') ? $data_pagto_raw : null;
+if (!in_array($status_financeiro, ['pendente','parcial','pago'], true)) {
+  $status_financeiro = 'pendente';
 }
+$data_pagto = ($data_pagto_raw !== '') ? $data_pagto_raw : null;
 
 if ($data_pagto_raw !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data_pagto_raw)) {
-  header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
-  exit;
+  osSaveBackToForm($id, 'Data de pagamento invalida.');
 }
 
 // Itens
@@ -180,14 +191,13 @@ if (!is_array($item_desc)) $item_desc = [];
 if (!is_array($item_qtd))  $item_qtd  = [];
 if (!is_array($item_vu))   $item_vu   = [];
 
-if ($cliente_id <= 0) { header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : '')); exit; }
+if ($cliente_id <= 0) { osSaveBackToForm($id, 'Selecione um cliente para salvar a OS.'); }
 
 $stCliente = $pdo->prepare("SELECT id FROM hf_clientes WHERE id = :id AND tenant_id = :t AND deleted_at IS NULL LIMIT 1");
 $stCliente->execute([':id' => $cliente_id, ':t' => $tid]);
 if (!$stCliente->fetch(PDO::FETCH_ASSOC)) {
   error_log("os_save.php cliente invalido para tenant cliente_id={$cliente_id} tenant={$tid} user={$uid}");
-  header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
-  exit;
+  osSaveBackToForm($id, 'Cliente invalido para esta empresa.');
 }
 
 $itensNormalizados = [];
@@ -228,13 +238,11 @@ foreach ($itensNormalizados as $item) {
   if ($item['ref'] <= 0) continue;
   if ($item['tipo'] === 'P' && empty($produtosValidos[$item['ref']])) {
     error_log("os_save.php item produto invalido ref={$item['ref']} tenant={$tid} user={$uid}");
-    header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
-    exit;
+    osSaveBackToForm($id, 'Produto selecionado nao esta disponivel.');
   }
   if ($item['tipo'] === 'S' && empty($servicosValidos[$item['ref']])) {
     error_log("os_save.php item servico invalido ref={$item['ref']} tenant={$tid} user={$uid}");
-    header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
-    exit;
+    osSaveBackToForm($id, 'Servico selecionado nao esta disponivel.');
   }
 }
 
@@ -244,8 +252,65 @@ foreach ($itensNormalizados as $item) {
 }
 $total = round($subtotalItens + $valor_mao_obra - $desconto + $acrescimo, 2);
 if ($total < 0) $total = 0;
-if ($status_financeiro === 'pago' && $valor_pago <= 0 && $total > 0) {
-  $valor_pago = $total;
+
+$status_informado = $status_financeiro;
+
+if ($status_informado === 'pendente') {
+  if ($valor_pago > 0) {
+    osSaveBackToForm($id, 'Status pendente exige valor recebido igual a zero. Use Parcial ou Pago.');
+  }
+  if (!empty($data_pagto)) {
+    osSaveBackToForm($id, 'Status pendente nao deve ter data de pagamento.');
+  }
+}
+
+if ($status_informado === 'parcial') {
+  if (!($total > 0 && $valor_pago > 0)) {
+    osSaveBackToForm($id, 'Status parcial exige valor recebido maior que zero.');
+  }
+  if ($valor_pago >= $total) {
+    osSaveBackToForm($id, 'Valor recebido no status parcial deve ser menor que o total final. Use Pago.');
+  }
+  if (empty($data_pagto)) {
+    osSaveBackToForm($id, 'Informe a data do pagamento para status parcial.');
+  }
+}
+
+if ($status_informado === 'pago') {
+  if ($valor_pago < $total) {
+    osSaveBackToForm($id, 'Status pago exige valor recebido igual ao total final. Use Parcial para valor menor.');
+  }
+  if ($valor_pago > $total) {
+    osSaveBackToForm($id, 'Status pago exige valor recebido exatamente igual ao total final. Revise o valor.');
+  }
+  if (empty($data_pagto)) {
+    osSaveBackToForm($id, 'Informe a data do pagamento para status pago.');
+  }
+}
+
+if ($total > 0) {
+  if ($valor_pago <= 0) {
+    $status_financeiro = 'pendente';
+    $valor_pago = 0.0;
+    $data_pagto = null;
+  } elseif ($valor_pago < $total) {
+    $status_financeiro = 'parcial';
+    if (empty($data_pagto)) {
+      osSaveBackToForm($id, 'Informe a data do pagamento para status parcial.');
+    }
+  } else {
+    $status_financeiro = 'pago';
+    if (empty($data_pagto)) {
+      osSaveBackToForm($id, 'Informe a data do pagamento para status pago.');
+    }
+    if ($valor_pago > $total) {
+      osSaveBackToForm($id, 'Valor recebido acima do total final. Revise o valor informado.');
+    }
+  }
+} else {
+  $status_financeiro = 'pendente';
+  $valor_pago = 0.0;
+  $data_pagto = null;
 }
 
 // Valida OS antes de qualquer UPDATE/DELETE quando for edicao
@@ -262,6 +327,7 @@ if ($id > 0) {
 
   if (!$stOs->fetch(PDO::FETCH_ASSOC)) {
     error_log("os_save.php OS invalida para edicao id={$id} tenant={$tid} user={$uid}");
+    osSaveFlash('danger', 'OS nao encontrada para edicao.');
     header('Location: /os_list.php');
     exit;
   }
@@ -524,6 +590,7 @@ try {
   }
 
   $pdo->commit();
+  osSaveFlash('success', 'OS salva com sucesso.');
   header("Location: /os_form.php?id={$id}");
   exit;
 
@@ -533,6 +600,5 @@ try {
   }
 
   error_log('os_save.php fatal: '.$e->getMessage());
-  header('Location: /os_form.php'.($id > 0 ? '?id='.(int)$id : ''));
-  exit;
+  osSaveBackToForm($id, 'Nao foi possivel salvar a OS. Tente novamente.');
 }

@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__.'/db.php';
+require_once __DIR__.'/_email.php';
 
 function hfSignupPlanosPermitidos()
 {
@@ -508,6 +509,15 @@ try {
         'login_url' => hfSignupBuildLoginUrl(),
     ];
     unset($_SESSION['HF_SIGNUP_ERROR'], $_SESSION['HF_SIGNUP_OLD']);
+
+    try {
+        $mailOk = hfSendWelcomeEmail($_SESSION['HF_SIGNUP_SUCCESS']);
+        if (!$mailOk) {
+            error_log('cadastro_save.php: falha ao enviar e-mail de boas-vindas para '.$email);
+        }
+    } catch (Exception $mailError) {
+        error_log('cadastro_save.php: erro no envio de e-mail de boas-vindas: '.$mailError->getMessage());
+    }
 
     header('Location: /cadastro_sucesso.php');
     exit;

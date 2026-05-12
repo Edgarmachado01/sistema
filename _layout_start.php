@@ -576,12 +576,30 @@ if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
     top:var(--topbar-h);
     left:-260px;
     height:calc(100vh - var(--topbar-h));
+    height:calc(100dvh - var(--topbar-h));
+    max-height:calc(100vh - var(--topbar-h));
+    max-height:calc(100dvh - var(--topbar-h));
     width:240px;
     z-index:1045;
     background:var(--bs-body-bg);
     box-shadow:0 16px 40px rgba(0,0,0,.25);
     transition:left .2s ease;
     border-right:none;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding-bottom:calc(1.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .hf-sidebar .nav,
+  .hf-sidebar-nav{
+    padding-bottom:calc(2.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .hf-sidebar .nav-link,
+  .hf-menu-item{
+    min-height:42px;
   }
 
   body.sidebar-open .hf-sidebar{ left:0 }

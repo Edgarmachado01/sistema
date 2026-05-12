@@ -3,6 +3,15 @@ $siteTitle = 'Planos - HelpDesk Facil';
 $siteDescription = 'Escolha o plano do HelpDesk Facil para organizar OS, clientes, financeiro, relatorios e equipe da sua assistencia tecnica.';
 $siteBodyClass = 'hf-plans-page';
 $whatsappUrl = 'https://wa.me/5500000000000?text=Quero%20conhecer%20os%20planos%20do%20HelpDesk%20Facil';
+require_once __DIR__.'/db.php';
+require_once __DIR__.'/_public_plan_catalog.php';
+
+$publicPlans = hfPublicPlanCatalogFallback();
+try {
+    $publicPlans = hfPublicPlanCatalogFetch(db());
+} catch (Exception $e) {
+    error_log('planos.php public plans: '.$e->getMessage());
+}
 
 include __DIR__.'/_site_start.php';
 ?>
@@ -143,48 +152,92 @@ include __DIR__.'/_site_start.php';
           <p class="hf-section-lead mx-auto">Nesta primeira fase, os planos preparam a estrutura comercial do SaaS. A cobranca recorrente pode entrar depois, sem travar a venda inicial.</p>
         </div>
 
+        <div class="hf-plan-proof justify-content-center" aria-label="Destaques comerciais">
+          <span><i class="bi bi-hourglass-split" aria-hidden="true"></i> 14 dias gratis</span>
+          <span><i class="bi bi-credit-card-2-front" aria-hidden="true"></i> Sem cartao</span>
+          <span><i class="bi bi-lightning-charge" aria-hidden="true"></i> Ativacao imediata</span>
+        </div>
+
+        <?php
+          $basicoPlan = $publicPlans['basico'] ?? hfPublicPlanCatalogFallback()['basico'];
+          $profissionalPlan = $publicPlans['profissional'] ?? hfPublicPlanCatalogFallback()['profissional'];
+          $premiumPlan = $publicPlans['premium'] ?? hfPublicPlanCatalogFallback()['premium'];
+        ?>
+
         <div class="hf-plan-grid">
           <article class="hf-plan-card">
+            <span class="hf-plan-badge">14 dias gratis</span>
             <h3 class="hf-plan-name">B&aacute;sico</h3>
             <p class="hf-plan-description">Para come&ccedil;ar a organizar a assist&ecirc;ncia.</p>
+            <div class="hf-plan-price-wrap" aria-label="Preco do plano Basico">
+              <div class="hf-plan-price-main">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$basicoPlan['monthly_cents']), ENT_QUOTES, 'UTF-8') ?>
+                <span>/mes</span>
+              </div>
+              <div class="hf-plan-price-annual">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$basicoPlan['annual_cents']), ENT_QUOTES, 'UTF-8') ?>/ano
+              </div>
+              <div class="hf-plan-savings">Economize 2 meses</div>
+            </div>
             <ul class="hf-plan-list">
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 2 usuarios</li>
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 100 OS/mes</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= number_format((int)$basicoPlan['user_limit'], 0, ',', '.') ?> usuarios</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= number_format((int)$basicoPlan['monthly_os_limit'], 0, ',', '.') ?> OS/mes</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Clientes ilimitados</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Produtos e servicos</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Financeiro simples</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Relatorios basicos</li>
             </ul>
-            <a class="btn hf-btn-secondary w-100" href="/cadastro.php?plano=basico">Come&ccedil;ar teste gr&aacute;tis</a>
+            <a class="btn hf-btn-secondary w-100" href="/cadastro.php?plano=basico">Come&ccedil;ar gr&aacute;tis por 14 dias</a>
           </article>
 
           <article class="hf-plan-card is-featured">
             <span class="hf-plan-badge">Recomendado</span>
             <h3 class="hf-plan-name">Profissional</h3>
             <p class="hf-plan-description">Para equipes que precisam de controle completo no dia a dia.</p>
+            <div class="hf-plan-price-wrap" aria-label="Preco do plano Profissional">
+              <div class="hf-plan-price-main">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$profissionalPlan['monthly_cents']), ENT_QUOTES, 'UTF-8') ?>
+                <span>/mes</span>
+              </div>
+              <div class="hf-plan-price-annual">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$profissionalPlan['annual_cents']), ENT_QUOTES, 'UTF-8') ?>/ano
+              </div>
+              <div class="hf-plan-savings">Economize 2 meses</div>
+            </div>
             <ul class="hf-plan-list">
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 5 usuarios</li>
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 500 OS/mes</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= number_format((int)$profissionalPlan['user_limit'], 0, ',', '.') ?> usuarios</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= number_format((int)$profissionalPlan['monthly_os_limit'], 0, ',', '.') ?> OS/mes</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Financeiro completo</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Relatorios com exportacao</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Logo e cores da empresa</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Suporte prioritario</li>
             </ul>
-            <a class="btn btn-primary hf-btn-primary w-100" href="/cadastro.php?plano=profissional">Come&ccedil;ar teste gr&aacute;tis</a>
+            <a class="btn btn-primary hf-btn-primary w-100" href="/cadastro.php?plano=profissional">Come&ccedil;ar gr&aacute;tis por 14 dias</a>
           </article>
 
-          <article class="hf-plan-card">
+          <article class="hf-plan-card is-premium">
+            <span class="hf-plan-badge is-premium">Premium</span>
             <h3 class="hf-plan-name">Premium</h3>
-            <p class="hf-plan-description">Para equipes maiores, com mais volume e personalizacao.</p>
+            <p class="hf-plan-description">Para equipes maiores, com mais volume, branding forte e atendimento prioritario.</p>
+            <div class="hf-plan-price-wrap" aria-label="Preco do plano Premium">
+              <div class="hf-plan-price-main">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$premiumPlan['monthly_cents']), ENT_QUOTES, 'UTF-8') ?>
+                <span>/mes</span>
+              </div>
+              <div class="hf-plan-price-annual">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$premiumPlan['annual_cents']), ENT_QUOTES, 'UTF-8') ?>/ano
+              </div>
+              <div class="hf-plan-savings">Economize 2 meses</div>
+            </div>
             <ul class="hf-plan-list">
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 15 usuarios</li>
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 2.000 OS/mes</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= number_format((int)$premiumPlan['user_limit'], 0, ',', '.') ?> usuarios</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> <?= number_format((int)$premiumPlan['monthly_os_limit'], 0, ',', '.') ?> OS/mes</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Relatorios avancados</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Branding completo</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Dominio proprio futuramente</li>
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Suporte premium</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Suporte prioritario</li>
             </ul>
-            <a class="btn hf-btn-secondary w-100" href="/cadastro.php?plano=premium">Come&ccedil;ar teste gr&aacute;tis</a>
+            <a class="btn hf-btn-secondary w-100" href="/cadastro.php?plano=premium">Testar agora</a>
           </article>
         </div>
       </div>

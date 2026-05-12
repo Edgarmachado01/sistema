@@ -459,6 +459,64 @@ img {
   line-height: 1.6;
 }
 
+.hf-plan-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  margin-top: 1rem;
+}
+
+.hf-plan-proof span {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+  border: 1px solid rgba(148, 163, 184, .28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .9);
+  padding: .34rem .72rem;
+  color: var(--hf-site-ink);
+  font-size: .79rem;
+  font-weight: 760;
+}
+
+.hf-plan-proof i {
+  color: var(--hf-site-primary);
+}
+
+.hf-plan-price-wrap {
+  margin-top: .7rem;
+  margin-bottom: .75rem;
+}
+
+.hf-plan-price-main {
+  color: var(--hf-site-ink);
+  font-size: 1.95rem;
+  font-weight: 930;
+  letter-spacing: -.015em;
+  line-height: 1.08;
+}
+
+.hf-plan-price-main span {
+  margin-left: .3rem;
+  color: var(--hf-site-muted);
+  font-size: .86rem;
+  font-weight: 780;
+}
+
+.hf-plan-price-annual {
+  margin-top: .24rem;
+  color: #0d9488;
+  font-size: .94rem;
+  font-weight: 850;
+}
+
+.hf-plan-savings {
+  margin-top: .16rem;
+  color: #334155;
+  font-size: .8rem;
+  font-weight: 720;
+}
+
 .hf-plan-list {
   display: grid;
   gap: .62rem;
@@ -476,6 +534,22 @@ img {
 
 .hf-plan-list i {
   color: var(--hf-site-accent);
+}
+
+.hf-plan-card.is-premium {
+  border-color: rgba(180, 83, 9, .34);
+  background:
+    radial-gradient(circle at 14% 0%, rgba(245, 158, 11, .14), transparent 16rem),
+    linear-gradient(180deg, #fffdf9 0%, #ffffff 58%);
+}
+
+.hf-plan-card.is-premium .hf-plan-name {
+  color: #7c2d12;
+}
+
+.hf-plan-badge.is-premium {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  color: #ffffff;
 }
 
 .hf-cta-band {
@@ -662,6 +736,15 @@ img {
   .hf-plan-card,
   .hf-cta-band {
     padding: 1rem;
+  }
+
+  .hf-plan-proof span {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .hf-plan-price-main {
+    font-size: 1.72rem;
   }
 }
 

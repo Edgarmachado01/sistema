@@ -3,6 +3,7 @@ require_once __DIR__.'/auth.php';
 requireLogin();
 require_once __DIR__.'/db.php';
 require_once __DIR__.'/_plan_usage.php';
+require_once __DIR__.'/_plan_pricing.php';
 
 $pdo = db();
 $tid = function_exists('tenantId') ? (int)tenantId() : 0;
@@ -118,60 +119,54 @@ if ($isTrial && !empty($usage['trial_end_at'])) {
     }
 }
 
-$pricingPlans = [
-    [
-        'code' => 'basico',
-        'name' => 'Basico',
-        'monthly' => 4990,
-        'annual' => 49900,
-        'highlight' => false,
-        'features' => ['2 usuarios', '100 OS por mes', 'Financeiro simples', 'Relatorios basicos'],
-    ],
-    [
-        'code' => 'profissional',
-        'name' => 'Profissional',
-        'monthly' => 7990,
-        'annual' => 79900,
-        'highlight' => true,
-        'features' => ['5 usuarios', '500 OS por mes', 'Financeiro completo', 'Exportacoes e relatorios'],
-    ],
-    [
-        'code' => 'premium',
-        'name' => 'Premium',
-        'monthly' => 12990,
-        'annual' => 129900,
-        'highlight' => false,
-        'features' => ['15 usuarios', '2000 OS por mes', 'Relatorios avancados', 'Branding completo'],
-    ],
-];
-
-$pricingByCode = [];
-foreach ($pricingPlans as $pricingPlan) {
-    $pricingByCode[(string)$pricingPlan['code']] = [
-        'monthly' => (int)($pricingPlan['monthly'] ?? 0),
-        'annual' => (int)($pricingPlan['annual'] ?? 0),
-    ];
+$pricingPlans = [];
+try {
+    $pricingPlans = hfPlanPricingFetchCatalog($pdo);
+} catch (Exception $e) {
+    error_log('billing.php pricing catalog: '.$e->getMessage());
+}
+if (!$pricingPlans) {
+    $pricingPlans = hfPlanPricingFallbackCatalog();
+}
+$pricingByCode = hfPlanPricingIndexByCode($pricingPlans);
+$pricingPlansForDisplay = array_values(array_filter($pricingPlans, function ($plan) {
+    return trim((string)($plan['code'] ?? '')) !== 'cortesia';
+}));
+if (!$pricingPlansForDisplay) {
+    $pricingPlansForDisplay = $pricingPlans;
 }
 
 $currentPeriodStart = null;
+$currentMonthlyCents = 0;
 try {
     if ($tid > 0) {
         $stmtBillingSub = $pdo->prepare("
-            SELECT current_period_start
-            FROM tenant_subscriptions
-            WHERE tenant_id = :tenant_id
-            ORDER BY id DESC
+            SELECT
+                ts.current_period_start,
+                p.monthly_price_cents
+            FROM tenant_subscriptions ts
+            JOIN plans p ON p.id = ts.plan_id
+            WHERE ts.tenant_id = :tenant_id
+            ORDER BY ts.id DESC
             LIMIT 1
         ");
         $stmtBillingSub->execute([':tenant_id' => $tid]);
-        $currentPeriodStart = $stmtBillingSub->fetchColumn() ?: null;
+        $billingSubRow = $stmtBillingSub->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($billingSubRow) {
+            $currentPeriodStart = $billingSubRow['current_period_start'] ?? null;
+            $currentMonthlyCents = (int)($billingSubRow['monthly_price_cents'] ?? 0);
+        }
     }
 } catch (Exception $e) {
     error_log('billing.php subscription: '.$e->getMessage());
     $currentPeriodStart = null;
+    $currentMonthlyCents = 0;
 }
 
-$currentPlanPricing = $pricingByCode[$planCode] ?? ['monthly' => 0, 'annual' => 0];
+$currentPlanPricing = $pricingByCode[$planCode] ?? [
+    'monthly' => $currentMonthlyCents,
+    'annual' => hfPlanPricingAnnualCents($currentMonthlyCents),
+];
 $billingCycleLabel = hfBillingCycleLabel(
     $currentPeriodStart,
     $usage['current_period_end'] ?? null,
@@ -559,6 +554,10 @@ include __DIR__.'/_sidebar.php';
         <strong><?= htmlspecialchars($billingCycleLabel, ENT_QUOTES, 'UTF-8') ?></strong>
       </article>
       <article class="hf-billing-card hf-usage-item">
+        <span>Trial termina</span>
+        <strong><?= htmlspecialchars($isCortesia ? '-' : hfBillingDate($usage['trial_end_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></strong>
+      </article>
+      <article class="hf-billing-card hf-usage-item">
         <span>Vencimento</span>
         <strong><?= htmlspecialchars($isCortesia ? '-' : hfBillingDate($usage['current_period_end'] ?? null), ENT_QUOTES, 'UTF-8') ?></strong>
       </article>
@@ -590,7 +589,7 @@ include __DIR__.'/_sidebar.php';
       </div>
 
       <div class="hf-pricing-grid">
-        <?php foreach ($pricingPlans as $pricePlan): ?>
+        <?php foreach ($pricingPlansForDisplay as $pricePlan): ?>
           <?php $isCurrent = $planCode === $pricePlan['code']; ?>
           <article class="hf-billing-card hf-price-card <?= !empty($pricePlan['highlight']) ? 'is-featured' : '' ?>">
             <span class="hf-price-badge">

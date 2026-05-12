@@ -17,7 +17,7 @@ $siteBodyClass = $siteBodyClass ?? '';
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <link href="/assets/site.css?v=1" rel="stylesheet">
+  <link href="/assets/site.css?v=2" rel="stylesheet">
 </head>
 <body class="hf-site-body <?= htmlspecialchars($siteBodyClass, ENT_QUOTES, 'UTF-8') ?>">
   <header class="hf-site-header">

@@ -36,7 +36,7 @@ if ($nome==='') { header('Location: /servico_form.php?err=nome'); exit; }
 
 function money_to_decimal($v){
   $v = trim((string)$v);
-  if ($v==='') return 0.00;
+  if ($v==='') return null;
   $v = str_replace(['.',' '],'',$v);
   $v = str_replace(',','.',$v);
   return (float)$v;
@@ -44,7 +44,7 @@ function money_to_decimal($v){
 
 $data = [
   'categoria'     => trim($_POST['categoria'] ?? ''),
-  'preco'         => money_to_decimal($_POST['preco'] ?? 0),
+  'preco'         => money_to_decimal($_POST['preco'] ?? ''),
   'custo_ref'     => money_to_decimal($_POST['custo_ref'] ?? 0),
   'sla_dias'      => (($_POST['sla_dias'] ?? '') !== '' ? (int)$_POST['sla_dias'] : null),
   'garantia_dias' => (($_POST['garantia_dias'] ?? '') !== '' ? (int)$_POST['garantia_dias'] : null),
@@ -52,6 +52,9 @@ $data = [
   'descricao'     => trim($_POST['descricao'] ?? ''),
   'status'        => (int)($_POST['status'] ?? 1),
 ];
+if ($data['preco'] === null || $data['preco'] < 0) {
+  header('Location: /servico_form.php'.($id > 0 ? '?id='.$id.'&err=preco' : '?err=preco')); exit;
+}
 
 try{
   if ($id>0) {

@@ -3,7 +3,6 @@ require_once __DIR__.'/auth.php';
 requireLogin();
 
 require_once __DIR__.'/db.php';
-require_once __DIR__.'/_plan_usage.php';
 
 $pdo = db();
 
@@ -150,6 +149,7 @@ $metrics = [
 ];
 $attentionOs = [];
 $attentionFinance = [];
+$saldoAbertoExpr = "GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0)";
 
 try {
     $metrics['os_abertas'] = hfDashCount($pdo, "
@@ -265,12 +265,12 @@ try {
     }
 
     $metrics['saldo_aberto'] = hfDashScalar($pdo, "
-        SELECT COALESCE(SUM(GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0)), 0)
+        SELECT COALESCE(SUM({$saldoAbertoExpr}), 0)
         FROM hf_os o
         WHERE o.tenant_id = :tid
           {$osDeletedSql}
           AND COALESCE(o.status, '') <> 'cancelada'
-          AND GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0) > 0
+          AND {$saldoAbertoExpr} > 0
     ", [':tid' => $tid]);
 
     $attentionOs = hfDashFetchAll($pdo, "
@@ -296,7 +296,7 @@ try {
             o.id,
             o.numero,
             o.status_financeiro,
-            GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0) AS saldo,
+            {$saldoAbertoExpr} AS saldo,
             COALESCE(c.nome, 'Cliente nao informado') AS cliente
         FROM hf_os o
         LEFT JOIN hf_clientes c
@@ -305,87 +305,12 @@ try {
         WHERE o.tenant_id = :tid
           {$osDeletedSql}
           AND COALESCE(o.status, '') <> 'cancelada'
-          AND GREATEST(COALESCE(o.total, 0) - COALESCE(o.valor_pago, 0), 0) > 0
-        ORDER BY {$osDateExpr} ASC, o.id ASC
-        LIMIT 4
+          AND {$saldoAbertoExpr} > 0
+        ORDER BY saldo DESC, {$osDateExpr} ASC, o.id ASC
+        LIMIT 12
     ", [':tid' => $tid]);
 } catch (Exception $e) {
     error_log('dashboard.php metricas: '.$e->getMessage());
-}
-
-$planUsageCard = null;
-if ($tid > 0 && !(function_exists('isSysAdmin') && isSysAdmin())) {
-    try {
-        $planUsage = hfTenantUsage($pdo, $tid);
-        $hasPlanInfo = !empty($planUsage['plan_name']) || !empty($planUsage['plan_code']) || !empty($planUsage['subscription_status']);
-
-        if ($hasPlanInfo) {
-            $planName = trim((string)($planUsage['plan_name'] ?? ''));
-            if ($planName === '') {
-                $planName = trim((string)($planUsage['plan_code'] ?? 'Plano'));
-            }
-
-            $planCode = trim((string)($planUsage['plan_code'] ?? ''));
-            $statusKey = (string)($planUsage['subscription_status'] ?? '');
-            $statusLabels = [
-                'trial' => 'Trial',
-                'ativo' => 'Ativo',
-                'vencido' => 'Vencido',
-                'bloqueado' => 'Bloqueado',
-                'cancelado' => 'Cancelado',
-            ];
-            if ($planCode === 'cortesia') {
-                $statusLabels['ativo'] = 'Cortesia';
-            }
-
-            $userLimit = (int)($planUsage['user_limit'] ?? 0);
-            $osLimit = (int)($planUsage['monthly_os_limit'] ?? 0);
-
-            $trialText = '';
-            if (!empty($planUsage['is_trial']) && !empty($planUsage['trial_end_at'])) {
-                $trialEndTs = strtotime((string)$planUsage['trial_end_at']);
-                if ($trialEndTs) {
-                    $today = strtotime(date('Y-m-d'));
-                    $trialEndDay = strtotime(date('Y-m-d', $trialEndTs));
-                    $daysLeft = max(0, (int)ceil(($trialEndDay - $today) / 86400));
-                    $trialText = 'Teste ate '.date('d/m/Y', $trialEndTs).' - '.($daysLeft === 1 ? '1 dia restante' : $daysLeft.' dias restantes');
-                }
-            }
-
-            $periodEndText = '';
-            if (!empty($planUsage['current_period_end'])) {
-                $periodEndTs = strtotime((string)$planUsage['current_period_end']);
-                if ($periodEndTs) {
-                    $periodEndText = 'Vencimento em '.date('d/m/Y', $periodEndTs).'.';
-                }
-            }
-
-            $needsBillingAction = in_array($statusKey, ['vencido', 'bloqueado', 'cancelado'], true);
-
-            $planUsageCard = [
-                'plan_name' => $planName,
-                'plan_code' => $planCode,
-                'status_key' => $statusKey,
-                'status' => $statusLabels[$statusKey] ?? ($statusKey !== '' ? ucfirst($statusKey) : 'Sem status'),
-                'active_users' => (int)($planUsage['active_users'] ?? 0),
-                'user_limit' => $userLimit,
-                'user_limit_label' => $userLimit > 0 ? (string)$userLimit : 'Ilimitado',
-                'users_usage_percent' => (int)($planUsage['users_usage_percent'] ?? 0),
-                'is_near_user_limit' => !empty($planUsage['is_near_user_limit']),
-                'monthly_os_count' => (int)($planUsage['monthly_os_count'] ?? 0),
-                'monthly_os_limit' => $osLimit,
-                'monthly_os_limit_label' => $osLimit > 0 ? number_format($osLimit, 0, ',', '.') : 'Ilimitado',
-                'os_usage_percent' => (int)($planUsage['os_usage_percent'] ?? 0),
-                'is_near_os_limit' => !empty($planUsage['is_near_os_limit']),
-                'is_trial' => !empty($planUsage['is_trial']),
-                'trial_text' => $trialText,
-                'period_end_text' => $periodEndText,
-                'needs_billing_action' => $needsBillingAction,
-            ];
-        }
-    } catch (Exception $e) {
-        error_log('dashboard.php plan usage card: '.$e->getMessage());
-    }
 }
 
 $onboardingCard = null;
@@ -601,85 +526,6 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
       </section>
     <?php endif; ?>
 
-    <?php if ($planUsageCard): ?>
-      <section class="hf-plan-usage-card">
-        <div class="hf-plan-usage-head">
-          <div>
-            <span class="hf-plan-usage-kicker">Uso do plano</span>
-            <h5><?= htmlspecialchars($planUsageCard['plan_name'], ENT_QUOTES, 'UTF-8') ?></h5>
-          </div>
-          <?php
-            $planStatusClass = '';
-            if ($planUsageCard['is_trial']) {
-                $planStatusClass = 'is-trial';
-            } elseif (in_array((string)($planUsageCard['status_key'] ?? ''), ['vencido', 'bloqueado', 'cancelado'], true)) {
-                $planStatusClass = 'is-critical';
-            } elseif ((string)($planUsageCard['plan_code'] ?? '') === 'cortesia') {
-                $planStatusClass = 'is-cortesia';
-            }
-          ?>
-          <span class="hf-plan-status <?= $planStatusClass ?>">
-            <?= htmlspecialchars($planUsageCard['status'], ENT_QUOTES, 'UTF-8') ?>
-          </span>
-        </div>
-
-        <?php if ($planUsageCard['trial_text'] !== ''): ?>
-          <div class="hf-plan-trial-note">
-            <i class="bi bi-clock-history" aria-hidden="true"></i>
-            <?= htmlspecialchars($planUsageCard['trial_text'], ENT_QUOTES, 'UTF-8') ?>
-          </div>
-        <?php endif; ?>
-
-        <?php if ($planUsageCard['period_end_text'] !== ''): ?>
-          <div class="hf-plan-trial-note">
-            <i class="bi bi-calendar-event" aria-hidden="true"></i>
-            <?= htmlspecialchars($planUsageCard['period_end_text'], ENT_QUOTES, 'UTF-8') ?>
-          </div>
-        <?php endif; ?>
-
-        <?php if ($planUsageCard['needs_billing_action']): ?>
-          <div class="hf-plan-billing-cta">
-            <span>Assinatura com pendencia comercial. Regularize no billing para manter o acesso.</span>
-            <a class="btn btn-sm btn-warning" href="/billing.php">Ir para Billing</a>
-          </div>
-        <?php endif; ?>
-
-        <div class="hf-plan-usage-grid">
-          <div class="hf-plan-meter <?= $planUsageCard['is_near_user_limit'] ? 'is-warning' : '' ?>">
-            <div class="hf-plan-meter-top">
-              <span><i class="bi bi-people" aria-hidden="true"></i> Usuarios ativos</span>
-              <strong>
-                <?= (int)$planUsageCard['active_users'] ?> /
-                <?= htmlspecialchars($planUsageCard['user_limit_label'], ENT_QUOTES, 'UTF-8') ?>
-              </strong>
-            </div>
-            <div class="hf-plan-meter-bar">
-              <span style="width: <?= (int)$planUsageCard['users_usage_percent'] ?>%"></span>
-            </div>
-            <?php if ($planUsageCard['is_near_user_limit']): ?>
-              <small>Voce esta perto do limite de usuarios do plano.</small>
-            <?php endif; ?>
-          </div>
-
-          <div class="hf-plan-meter <?= $planUsageCard['is_near_os_limit'] ? 'is-warning' : '' ?>">
-            <div class="hf-plan-meter-top">
-              <span><i class="bi bi-clipboard2-check" aria-hidden="true"></i> OS neste mes</span>
-              <strong>
-                <?= number_format((int)$planUsageCard['monthly_os_count'], 0, ',', '.') ?> /
-                <?= htmlspecialchars($planUsageCard['monthly_os_limit_label'], ENT_QUOTES, 'UTF-8') ?>
-              </strong>
-            </div>
-            <div class="hf-plan-meter-bar">
-              <span style="width: <?= (int)$planUsageCard['os_usage_percent'] ?>%"></span>
-            </div>
-            <?php if ($planUsageCard['is_near_os_limit']): ?>
-              <small>Voce esta perto do limite mensal de OS.</small>
-            <?php endif; ?>
-          </div>
-        </div>
-      </section>
-    <?php endif; ?>
-
     <div class="hf-section-heading">
       <div>
         <h5>Indicadores principais</h5>
@@ -723,7 +569,7 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
 
       <?php if (!$isAtendenteOnly): ?>
       <div class="col-12 col-md-6 col-xl-4">
-        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-warning" href="/financeiro_os_lista.php?status=pendente">
+        <a class="hf-card hf-kpi hf-dashboard-kpi kpi-warning" href="/financeiro_os_lista.php">
           <div class="kpi-top">
             <div class="kpi-title">A receber</div>
             <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
@@ -817,12 +663,6 @@ $periodLabel = date('d/m/Y', strtotime($data_ini)).' a '.date('d/m/Y', strtotime
             </div>
           </div>
 
-          <?php if ($planUsageCard && ($planUsageCard['is_near_user_limit'] || $planUsageCard['is_near_os_limit'])): ?>
-            <div class="hf-plan-alert-line">
-              <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
-              O uso do plano esta perto do limite. Avalie o crescimento da operacao.
-            </div>
-          <?php endif; ?>
         </section>
       </div>
 

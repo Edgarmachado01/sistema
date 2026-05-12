@@ -382,14 +382,17 @@
     min-width: 240px !important;
     max-width: 240px !important;
     height: calc(100vh - var(--topbar-h)) !important;
+    height: calc(100dvh - var(--topbar-h)) !important;
     max-height: calc(100vh - var(--topbar-h)) !important;
+    max-height: calc(100dvh - var(--topbar-h)) !important;
     z-index: 1045;
     border-right: none;
     box-shadow: 0 16px 40px rgba(0,0,0,.25);
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    overscroll-behavior: contain;
     transition: left .2s ease;
   }
 
@@ -399,7 +402,7 @@
 
   .hf-sidebar .nav,
   .hf-sidebar-nav {
-    padding: .65rem .35rem 1.25rem;
+    padding: .65rem .35rem calc(2rem + env(safe-area-inset-bottom, 0px));
   }
 
   .hf-sidebar .nav-link,

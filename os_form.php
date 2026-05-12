@@ -20,7 +20,7 @@ $id = (int)($_GET['id'] ?? 0);
 // ---------- CLIENTES (com fallback p/ coluna default_garantia_dias) ----------
 try {
   $st = $pdo->prepare("
-    SELECT id, nome, default_garantia_dias
+    SELECT id, nome, documento, default_garantia_dias
     FROM hf_clientes
     WHERE tenant_id=:t AND deleted_at IS NULL
     ORDER BY nome
@@ -29,7 +29,7 @@ try {
   $clientes = $st->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
   $st = $pdo->prepare("
-    SELECT id, nome, 0 AS default_garantia_dias
+    SELECT id, nome, documento, 0 AS default_garantia_dias
     FROM hf_clientes
     WHERE tenant_id=:t AND deleted_at IS NULL
     ORDER BY nome
@@ -101,6 +101,10 @@ if ($os && !empty($os['garantia_ate'])) {
   $end = strtotime($os['garantia_ate']);
   if ($ini && $end && $end >= $ini) $garantiaDiasEdit = (string)ceil(($end - $ini) / 86400);
 }
+
+$totalAtual = (float)($os['total'] ?? 0);
+$valorPagoAtual = (float)($os['valor_pago'] ?? 0);
+$saldoAtual = max(0, $totalAtual - $valorPagoAtual);
 ?>
 <?php include __DIR__.'/_sidebar.php'; ?>
 <main class="hf-content hf-os-form-page">
@@ -160,6 +164,7 @@ if ($os && !empty($os['garantia_ate'])) {
                   <?php foreach($clientes as $c): ?>
                     <option value="<?= (int)$c['id'] ?>"
                             data-garantia="<?= (int)($c['default_garantia_dias'] ?? 0) ?>"
+                            data-documento="<?= htmlspecialchars((string)($c['documento'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                             <?= $os && (int)$os['cliente_id']===(int)$c['id'] ? 'selected':'' ?>>
                       <?= htmlspecialchars($c['nome']) ?>
                     </option>
@@ -168,6 +173,9 @@ if ($os && !empty($os['garantia_ate'])) {
                 <button class="btn btn-outline-success hf-icon-btn" type="button" data-bs-toggle="modal" data-bs-target="#modalCliente" title="Cadastrar cliente">
                   <i class="bi bi-person-plus"></i>
                 </button>
+              </div>
+              <div id="clienteDocAlert" class="alert alert-warning py-2 px-3 mt-2 mb-0 small" style="display:none;">
+                Cliente sem CPF/CNPJ cadastrado. Você pode completar depois.
               </div>
             </div>
           </div>
@@ -264,13 +272,13 @@ if ($os && !empty($os['garantia_ate'])) {
             <table class="table table-sm align-middle" id="itensTable">
               <thead class="table-light">
                 <tr>
-                  <th style="width:110px">Tipo</th>
-                  <th>Ref.</th>
-                  <th>Descrição</th>
-                  <th style="width:110px" class="text-end">Qtd</th>
-                  <th style="width:140px" class="text-end">Vlr Unit (R$)</th>
-                  <th style="width:140px" class="text-end">Total (R$)</th>
-                  <th style="width:70px"></th>
+                  <th style="width:140px; min-width:140px;">Tipo</th>
+                  <th style="width:220px; min-width:220px;">Ref.</th>
+                  <th style="min-width:260px;">Descrição</th>
+                  <th style="width:100px; min-width:100px;" class="text-end">Qtd</th>
+                  <th style="width:130px; min-width:130px;" class="text-end">Vlr Unit (R$)</th>
+                  <th style="width:130px; min-width:130px;" class="text-end">Total (R$)</th>
+                  <th style="width:74px; min-width:74px;"></th>
                 </tr>
               </thead>
               <tbody id="itensBody">
@@ -314,6 +322,11 @@ if ($os && !empty($os['garantia_ate'])) {
               <input class="form-control hf-total-input" name="total" id="totalGeral" readonly
                      value="<?= number_format((float)($os['total'] ?? 0),2,',','.') ?>">
             </div>
+            <div class="col-md-3">
+              <label class="form-label">Saldo em aberto (R$)</label>
+              <input class="form-control" id="saldoAbertoFinanceiro" readonly
+                     value="<?= number_format($saldoAtual,2,',','.') ?>">
+            </div>
           </div>
 
           <hr class="my-3 hf-soft-divider">
@@ -322,7 +335,7 @@ if ($os && !empty($os['garantia_ate'])) {
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label">Status financeiro</label>
-              <select class="form-select" name="status_financeiro">
+              <select class="form-select" name="status_financeiro" id="statusFinanceiro">
                 <?php
                   $sf = $os['status_financeiro'] ?? 'pendente';
                   foreach (['pendente'=>'Pendente','parcial'=>'Parcial','pago'=>'Pago'] as $k=>$label):
@@ -354,16 +367,23 @@ if ($os && !empty($os['garantia_ate'])) {
 
             <div class="col-md-2">
               <label class="form-label">Valor pago (R$)</label>
-              <input class="form-control" name="valor_pago"
+              <input class="form-control" name="valor_pago" id="valorPagoFinanceiro"
                      value="<?= number_format((float)($os['valor_pago'] ?? 0),2,',','.') ?>">
             </div>
 
             <div class="col-md-2">
               <label class="form-label">Data pagamento</label>
-              <input type="date" class="form-control" name="data_pagto"
+              <input type="date" class="form-control" name="data_pagto" id="dataPagtoFinanceiro"
                      value="<?= !empty($os['data_pagto']) ? htmlspecialchars(substr($os['data_pagto'],0,10)) : '' ?>">
             </div>
           </div>
+          <div class="mt-2 small text-muted">
+            Para múltiplos pagamentos parciais, será criada uma etapa futura com histórico de pagamentos.
+          </div>
+          <div id="avisoSaldoAberto" class="alert alert-warning mt-3 mb-0 py-2 px-3 small <?= $saldoAtual > 0 ? '' : 'd-none' ?>">
+            Esta OS possui saldo em aberto.
+          </div>
+          <div id="financeiroValidacaoMsg" class="alert alert-danger mt-2 mb-0 py-2 px-3 small d-none"></div>
         </div>
       </div>
 
@@ -452,7 +472,8 @@ if ($os && !empty($os['garantia_ate'])) {
 <!-- Modal: Novo Cliente (cadastro rápido) -->
 <div class="modal fade" id="modalCliente" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <form class="modal-content hf-modal-card" id="formQuickCliente">
+    <form class="modal-content hf-modal-card" id="formQuickCliente" data-hf-no-loading>
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
       <div class="modal-header">
         <h5 class="modal-title"><i class="bi bi-person-plus"></i> Novo Cliente</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
@@ -472,8 +493,8 @@ if ($os && !empty($os['garantia_ate'])) {
             <input name="email" type="email" class="form-control" maxlength="120">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Celular</label>
-            <input name="celular" class="form-control" maxlength="30" placeholder="(11) 9 9999-9999">
+            <label class="form-label">Telefone*</label>
+            <input name="celular" class="form-control" required maxlength="30" placeholder="(11) 9 9999-9999">
           </div>
         </div>
         <div id="quickCliMsg" class="text-danger small mt-2" style="display:none"></div>
@@ -762,12 +783,15 @@ if ($os && !empty($os['garantia_ate'])) {
 .itens-responsive {
   border: 1px solid rgba(226, 232, 240, .9);
   border-radius: .95rem;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .itens-responsive table {
   margin-bottom: 0;
   --bs-table-bg: transparent;
+  min-width: 980px;
 }
 
 .itens-responsive thead th {
@@ -800,6 +824,10 @@ if ($os && !empty($os['garantia_ate'])) {
 .itens-responsive .form-select-sm {
   min-height: 34px;
   border-radius: .6rem;
+}
+
+.itens-responsive select.tipo {
+  min-width: 124px;
 }
 
 .itens-responsive .total {
@@ -873,7 +901,7 @@ if ($os && !empty($os['garantia_ate'])) {
 
 @media (min-width: 768px) {
   .itens-responsive table {
-    table-layout: fixed;
+    table-layout: auto;
   }
 }
 
@@ -1139,6 +1167,113 @@ function recalc(){
   const desc= toNumberBR(document.querySelector('[name="desconto"]').value);
   const acr = toNumberBR(document.querySelector('[name="acrescimo"]').value);
   document.getElementById('totalGeral').value = toBR(soma + mao - desc + acr);
+  syncFinanceiroUI('total_change');
+}
+
+function showFinanceiroMsg(text){
+  const box = document.getElementById('financeiroValidacaoMsg');
+  if (!box) return;
+  const msg = (text || '').toString().trim();
+  box.textContent = msg;
+  box.classList.toggle('d-none', msg === '');
+}
+
+function syncFinanceiroUI(reason){
+  const totalEl = document.getElementById('totalGeral');
+  const pagoEl = document.getElementById('valorPagoFinanceiro');
+  const saldoEl = document.getElementById('saldoAbertoFinanceiro');
+  const statusEl = document.getElementById('statusFinanceiro');
+  const dataEl = document.getElementById('dataPagtoFinanceiro');
+  const avisoEl = document.getElementById('avisoSaldoAberto');
+  if (!totalEl || !pagoEl || !saldoEl || !statusEl || !dataEl) return;
+
+  const status = String(statusEl.value || 'pendente');
+  const total = Math.max(0, toNumberBR(totalEl.value));
+  let pago = Math.max(0, toNumberBR(pagoEl.value));
+
+  if (status === 'pendente' && (reason === 'status_change' || reason === 'init')) {
+    pago = 0;
+    pagoEl.value = toBR(0);
+    dataEl.value = '';
+  }
+
+  if (status === 'pago' && (reason === 'status_change' || reason === 'total_change' || reason === 'init')) {
+    pago = total;
+    pagoEl.value = toBR(total);
+  }
+
+  const saldo = Math.max(0, total - pago);
+  saldoEl.value = toBR(saldo);
+
+  const precisaData = status === 'pago' || status === 'parcial';
+  dataEl.required = precisaData;
+
+  if (avisoEl) {
+    avisoEl.classList.toggle('d-none', saldo <= 0);
+  }
+
+  if (reason === 'valor_change' || reason === 'status_change' || reason === 'data_change') {
+    validateFinanceiro();
+  } else if (reason !== 'submit') {
+    showFinanceiroMsg('');
+  }
+}
+
+function validateFinanceiro(){
+  const totalEl = document.getElementById('totalGeral');
+  const pagoEl = document.getElementById('valorPagoFinanceiro');
+  const statusEl = document.getElementById('statusFinanceiro');
+  const dataEl = document.getElementById('dataPagtoFinanceiro');
+  if (!totalEl || !pagoEl || !statusEl || !dataEl) return true;
+
+  const status = String(statusEl.value || 'pendente');
+  const total = Math.max(0, toNumberBR(totalEl.value));
+  const pago = Math.max(0, toNumberBR(pagoEl.value));
+  const hasData = !!String(dataEl.value || '').trim();
+
+  if (status === 'pendente') {
+    if (pago > 0) {
+      showFinanceiroMsg('Status Pendente exige valor recebido igual a zero. Troque para Parcial ou Pago.');
+      return false;
+    }
+    if (hasData) {
+      showFinanceiroMsg('Status Pendente exige data de pagamento vazia.');
+      return false;
+    }
+  }
+
+  if (status === 'parcial') {
+    if (!(pago > 0)) {
+      showFinanceiroMsg('Status Parcial exige valor recebido maior que zero.');
+      return false;
+    }
+    if (!(pago < total)) {
+      showFinanceiroMsg('Status Parcial exige valor recebido menor que o total final. Use Pago quando quitar.');
+      return false;
+    }
+    if (!hasData) {
+      showFinanceiroMsg('Status Parcial exige data de pagamento.');
+      return false;
+    }
+  }
+
+  if (status === 'pago') {
+    if (pago < total) {
+      showFinanceiroMsg('Status Pago exige valor recebido igual ao total final. Para valor menor, use Parcial.');
+      return false;
+    }
+    if (pago > total) {
+      showFinanceiroMsg('Status Pago nao permite valor recebido acima do total final. Revise o valor.');
+      return false;
+    }
+    if (!hasData) {
+      showFinanceiroMsg('Status Pago exige data de pagamento.');
+      return false;
+    }
+  }
+
+  showFinanceiroMsg('');
+  return true;
 }
 
 function bindRow(tr){
@@ -1148,38 +1283,74 @@ function bindRow(tr){
   const qtd  = tr.querySelector('.qtd');
   const vu   = tr.querySelector('.vu');
 
-  function loadRefOptions(){
+  function loadRefOptions(opts){
+    const conf = Object.assign({
+      preserveCurrent: true,
+      allowFallback: true,
+      forceHydrate: false
+    }, opts || {});
+
     const isP = (tipo.value==='P');
     const list = isP ? PRODUTOS : SERVICOS;
-    const cur = String(ref.getAttribute('data-selected') || ref.value || '');
+    const cur = conf.preserveCurrent
+      ? String(ref.getAttribute('data-selected') || ref.value || '')
+      : '';
+
+    ref.removeAttribute('data-selected');
     ref.innerHTML = list.map(i=>`<option value="${i.id}" data-preco="${i.preco}">${escHtml(i.nome)}</option>`).join('');
+
     if (cur) ref.value = cur;
+    if (!ref.value && list.length > 0) ref.value = String(list[0].id);
 
     let sel = list.find(i=>String(i.id)===String(ref.value));
-    if (!sel && cur) {
+    if (!sel && cur && conf.allowFallback) {
       const opt = document.createElement('option');
       opt.value = cur;
       opt.dataset.preco = String(toNumberBR(vu.value));
-      opt.textContent = desc.value || (isP ? 'Produto não disponível' : 'Serviço não disponível');
+      opt.textContent = desc.value || (isP ? 'Produto nao disponivel' : 'Servico nao disponivel');
       ref.appendChild(opt);
       ref.value = cur;
       sel = { nome: opt.textContent, preco: toNumberBR(vu.value) };
     }
 
-    if (!desc.value && sel) desc.value = sel.nome;
-    if (!toNumberBR(vu.value) && sel) vu.value = toBR(sel.preco||0);
+    if (sel) {
+      if (conf.forceHydrate || !desc.value) desc.value = sel.nome || '';
+      if (conf.forceHydrate || !toNumberBR(vu.value)) vu.value = toBR(sel.preco||0);
+    } else if (conf.forceHydrate) {
+      desc.value = '';
+      vu.value = toBR(0);
+    }
+
     recalc();
   }
 
   tipo.addEventListener('change', ()=>{
     ref.setAttribute('data-selected','');
-    loadRefOptions();
+    desc.value = '';
+    vu.value = toBR(0);
+    loadRefOptions({
+      preserveCurrent: false,
+      allowFallback: false,
+      forceHydrate: true
+    });
   });
+
   ref.addEventListener('change', ()=>{
+    const isP = (tipo.value === 'P');
+    const list = isP ? PRODUTOS : SERVICOS;
+    const selectedId = String(ref.value || '');
+    const sel = list.find(i => String(i.id) === selectedId);
     const opt = ref.options[ref.selectedIndex];
-    const preco = parseFloat(opt?.dataset?.preco||'0')||0;
-    if (!desc.value) desc.value = opt.textContent.trim();
-    vu.value = toBR(preco);
+
+    if (sel) {
+      desc.value = sel.nome || '';
+      vu.value = toBR(sel.preco || 0);
+    } else {
+      const preco = parseFloat(opt?.dataset?.preco || '0') || 0;
+      desc.value = (opt?.textContent || '').trim();
+      vu.value = toBR(preco);
+    }
+
     recalc();
   });
 
@@ -1191,9 +1362,12 @@ function bindRow(tr){
     recalc();
   });
 
-  loadRefOptions();
+  loadRefOptions({
+    preserveCurrent: true,
+    allowFallback: true,
+    forceHydrate: false
+  });
 }
-
 function addItem(tipo='P', payload=null){
   const hint = tbody.querySelector('#emptyRow'); if (hint) hint.remove();
   const temp = document.createElement('tbody');
@@ -1214,7 +1388,26 @@ document.getElementById('addServ').addEventListener('click', ()=>addItem('S'));
     el.addEventListener('change', recalc);
   }
 });
-document.getElementById('osForm')?.addEventListener('submit', recalc);
+const pagoEl = document.getElementById('valorPagoFinanceiro');
+if (pagoEl) {
+  pagoEl.addEventListener('input', ()=>syncFinanceiroUI('valor_change'));
+  pagoEl.addEventListener('change', ()=>syncFinanceiroUI('valor_change'));
+}
+const statusEl = document.getElementById('statusFinanceiro');
+if (statusEl) {
+  statusEl.addEventListener('change', ()=>syncFinanceiroUI('status_change'));
+}
+const dataEl = document.getElementById('dataPagtoFinanceiro');
+if (dataEl) {
+  dataEl.addEventListener('change', ()=>syncFinanceiroUI('data_change'));
+}
+document.getElementById('osForm')?.addEventListener('submit', function(ev){
+  recalc();
+  syncFinanceiroUI('submit');
+  if (!validateFinanceiro()) {
+    ev.preventDefault();
+  }
+});
 
 // Preload itens (edição)
 <?php if ($itens && count($itens)): ?>
@@ -1235,6 +1428,7 @@ document.getElementById('osForm')?.addEventListener('submit', recalc);
 updateEmptyHint();
 recalc();
 <?php endif; ?>
+syncFinanceiroUI('init');
 </script>
 
 <!-- Preview local das fotos (somente OS nova, id=0) + limite 2 MB -->
@@ -1283,6 +1477,95 @@ recalc();
   const msgEl = document.getElementById('uploadMsg');
   if(!up) return;
 
+  function sanitizeFileName(name){
+    const raw = (name || 'foto').toString();
+    const base = raw.replace(/\.[^.]+$/, '');
+    const clean = base
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 60);
+    return (clean || 'foto') + '.jpg';
+  }
+
+  function readAsDataUrl(file){
+    return new Promise((resolve, reject)=>{
+      const fr = new FileReader();
+      fr.onload = ()=>resolve(fr.result);
+      fr.onerror = ()=>reject(new Error('reader_fail'));
+      fr.readAsDataURL(file);
+    });
+  }
+
+  function loadImage(dataUrl){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      img.onload = ()=>resolve(img);
+      img.onerror = ()=>reject(new Error('image_load_fail'));
+      img.src = dataUrl;
+    });
+  }
+
+  function canvasToBlob(canvas, quality){
+    return new Promise((resolve, reject)=>{
+      if (!canvas.toBlob) {
+        reject(new Error('canvas_blob_unsupported'));
+        return;
+      }
+      canvas.toBlob((blob)=>{
+        if (!blob) {
+          reject(new Error('canvas_blob_fail'));
+          return;
+        }
+        resolve(blob);
+      }, 'image/jpeg', quality);
+    });
+  }
+
+  async function optimizeImageFile(file){
+    const isImage = /^image\//i.test(file.type || '');
+    if (!isImage) return { file, optimized: false, reason: 'not_image' };
+
+    const hasCanvas = typeof document !== 'undefined'
+      && typeof document.createElement === 'function'
+      && typeof HTMLCanvasElement !== 'undefined'
+      && typeof FileReader !== 'undefined';
+    if (!hasCanvas) return { file, optimized: false, reason: 'canvas_unsupported' };
+
+    try{
+      const dataUrl = await readAsDataUrl(file);
+      const img = await loadImage(dataUrl);
+      const maxW = 1600;
+      const maxH = 1600;
+      const ratio = Math.min(maxW / Math.max(1, img.width), maxH / Math.max(1, img.height), 1);
+      const w = Math.max(1, Math.round(img.width * ratio));
+      const h = Math.max(1, Math.round(img.height * ratio));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return { file, optimized: false, reason: 'ctx_unsupported' };
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+
+      let quality = 0.75;
+      let blob = await canvasToBlob(canvas, quality);
+      while (blob.size > MAX_FILE_BYTES && quality > 0.45) {
+        quality -= 0.1;
+        blob = await canvasToBlob(canvas, quality);
+      }
+
+      const outFile = new File([blob], sanitizeFileName(file.name), { type: 'image/jpeg', lastModified: Date.now() });
+      return { file: outFile, optimized: true, reason: 'ok' };
+    }catch(_e){
+      return { file, optimized: false, reason: 'optimize_fail' };
+    }
+  }
+
   function setMsg(txt){
     if(!msgEl) return;
     msgEl.textContent = txt || '';
@@ -1296,11 +1579,17 @@ recalc();
     fd.append('csrf_token', <?= json_encode($csrfToken) ?>);
 
     let validFiles = 0;
+    setMsg('Otimizando foto antes do envio...');
+
     for (let i=0;i<files.length;i++){
-      const f = files[i];
+      let f = files[i];
       if (!/^image\//i.test(f.type)) continue;
+
+      const optimized = await optimizeImageFile(f);
+      f = optimized.file;
+
       if (f.size > MAX_FILE_BYTES){
-        alert('Arquivo acima de ' + MAX_FILE_MB + ' MB ignorado: ' + f.name);
+        alert('A foto "' + (files[i].name || 'imagem') + '" ainda ficou acima de ' + MAX_FILE_MB + ' MB. Tente uma imagem menor.');
         continue;
       }
       fd.append('fotos[]', f);
@@ -1418,7 +1707,17 @@ document.querySelectorAll('[data-gd]').forEach(btn=>{
 (function(){
   const sel = document.getElementById('cliSelect');
   const inp = document.getElementById('garantiaDias');
+  const docAlert = document.getElementById('clienteDocAlert');
   if (!sel || !inp) return;
+
+  function syncClienteDocAlert() {
+    if (!docAlert) return;
+    const opt = sel.options[sel.selectedIndex];
+    const rawDoc = String(opt?.dataset?.documento || '').replace(/\D+/g, '');
+    const shouldShow = !!sel.value && rawDoc === '';
+    docAlert.style.display = shouldShow ? '' : 'none';
+  }
+
   sel.addEventListener('change', ()=>{
     const opt = sel.options[sel.selectedIndex];
     const pad = parseInt(opt?.dataset?.garantia || '0', 10);
@@ -1426,52 +1725,99 @@ document.querySelectorAll('[data-gd]').forEach(btn=>{
       inp.value = pad;
       inp.dispatchEvent(new Event('input'));
     }
+    syncClienteDocAlert();
   });
+  syncClienteDocAlert();
 })();
 </script>
 
 <!-- Modal cliente: salvar rápido via AJAX -->
 <script>
 (function(){
-  const form = document.getElementById('formQuickCliente');
-  const msg  = document.getElementById('quickCliMsg');
-  const sel  = document.getElementById('cliSelect');
-  const modalEl = document.getElementById('modalCliente');
-  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  function showQuickToast(text, type){
+    const container = document.getElementById('hf-feedback-toast-container');
+    if (!container || !text) return;
 
-  if(!form) return;
+    const kind = ['success','danger','warning','info'].includes(type) ? type : 'info';
+    const icons = {
+      success: 'bi-check-circle-fill',
+      danger: 'bi-x-circle-fill',
+      warning: 'bi-exclamation-triangle-fill',
+      info: 'bi-info-circle-fill'
+    };
 
-  form.addEventListener('submit', async function(e){
-    e.preventDefault();
-    msg.style.display='none'; msg.textContent='';
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center border-0 hf-toast-' + kind;
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.innerHTML =
+      '<div class="d-flex">' +
+        '<div class="toast-body"><i class="bi ' + icons[kind] + ' me-2"></i>' + text + '</div>' +
+        '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>' +
+      '</div>';
 
-    const fd = new FormData(form);
-    fd.append('csrf_token', <?= json_encode($csrfToken) ?>);
-    try{
-      const r = await fetch('/cliente_quick_save.php', { method:'POST', body: fd });
-      const j = await r.json();
-      if(!j.ok){
-        msg.textContent = j.msg || 'Erro ao salvar';
-        msg.style.display='block';
-        return;
-      }
-
-      const op = document.createElement('option');
-      op.value = j.id;
-      op.textContent = j.nome;
-      sel.appendChild(op);
-      sel.value = String(j.id);
-
-      modal.hide();
-      form.reset();
-    }catch(err){
-      msg.textContent = 'Falha na comunicação';
-      msg.style.display = 'block';
+    container.appendChild(toast);
+    if (window.bootstrap && window.bootstrap.Toast) {
+      const t = new window.bootstrap.Toast(toast, { delay: 3800 });
+      toast.addEventListener('hidden.bs.toast', ()=>toast.remove());
+      t.show();
+    } else {
+      setTimeout(()=>toast.remove(), 3800);
     }
-  });
+  }
 
-  modalEl.addEventListener('shown.bs.modal', ()=>{
-    form.querySelector('[name="nome"]').focus();
+  document.addEventListener('DOMContentLoaded', function(){
+    const form = document.getElementById('formQuickCliente');
+    const msg  = document.getElementById('quickCliMsg');
+    const sel  = document.getElementById('cliSelect');
+    const modalEl = document.getElementById('modalCliente');
+    if(!form || !msg || !sel || !modalEl || !window.bootstrap || !window.bootstrap.Modal) return;
+
+    const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    form.addEventListener('submit', async function(e){
+      e.preventDefault();
+      msg.style.display='none'; msg.textContent='';
+
+      const fd = new FormData(form);
+      try{
+        const r = await fetch('/cliente_quick_save.php', {
+          method:'POST',
+          body: fd,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const raw = await r.text();
+        let j = null;
+        try { j = JSON.parse(raw); } catch(_e) {}
+
+        if(!r.ok || !j || !j.ok){
+          msg.textContent = (j && j.msg) ? j.msg : 'Nao foi possivel salvar o cliente.';
+          msg.style.display='block';
+          return;
+        }
+
+        const op = document.createElement('option');
+        op.value = j.id;
+        op.textContent = j.nome;
+        op.dataset.documento = '';
+        sel.appendChild(op);
+        sel.value = String(j.id);
+        sel.dispatchEvent(new Event('change'));
+
+        modal.hide();
+        form.reset();
+        showQuickToast('Cliente cadastrado com sucesso.', 'success');
+      }catch(_err){
+        msg.textContent = 'Falha na comunicacao. Tente novamente.';
+        msg.style.display = 'block';
+      }
+    });
+
+    modalEl.addEventListener('shown.bs.modal', ()=>{
+      const nome = form.querySelector('[name="nome"]');
+      if (nome) nome.focus();
+    });
   });
 })();
 </script>
@@ -1479,17 +1825,21 @@ document.querySelectorAll('[data-gd]').forEach(btn=>{
 <!-- Força abertura do modal de fotos via JS (desktop + mobile) -->
 <script>
 (function(){
-  const btn = document.getElementById('btnVerFotos');
-  const modalEl = document.getElementById('modalFotos');
-  if(!btn || !modalEl) return;
+  document.addEventListener('DOMContentLoaded', function(){
+    const btn = document.getElementById('btnVerFotos');
+    const modalEl = document.getElementById('modalFotos');
+    if(!btn || !modalEl || !window.bootstrap || !window.bootstrap.Modal) return;
 
-  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
 
-  btn.addEventListener('click', function(e){
-    e.preventDefault();
-    modal.show();
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      modal.show();
+    });
   });
 })();
 </script>
 
 <?php require_once __DIR__.'/_layout_end.php'; ?>
+
+

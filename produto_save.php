@@ -37,10 +37,35 @@ if ($nome==='') { header('Location: /produto_form.php?err=nome'); exit; }
 function money_to_decimal($v){
   // aceita "1.234,56" ou "1234.56" e normaliza para 1234.56
   $v = trim((string)$v);
-  if ($v==='') return 0.00;
-  $v = str_replace(['.',' '],'',$v);
-  $v = str_replace(',','.',$v);
+  if ($v==='') return null;
+  $v = str_replace(' ','',$v);
+  if (strpos($v, ',') !== false) {
+    $v = str_replace('.','',$v);
+    $v = str_replace(',','.', $v);
+  }
   return (float)$v;
+}
+
+function get_table_columns(PDO $pdo, $table){
+  static $cache = [];
+  if (isset($cache[$table])) return $cache[$table];
+
+  $sql = "SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = :t";
+  $st = $pdo->prepare($sql);
+  $st->execute([':t'=>$table]);
+  $cols = [];
+  foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $c) {
+    $cols[$c] = true;
+  }
+  $cache[$table] = $cols;
+  return $cols;
+}
+
+function has_col(array $cols, $name){
+  return isset($cols[$name]);
 }
 
 $data = [
@@ -49,13 +74,21 @@ $data = [
   'unidade'       => trim($_POST['unidade'] ?? ''),
   'ncm'           => trim($_POST['ncm'] ?? ''),
   'garantia_dias' => (($_POST['garantia_dias'] ?? '') !== '' ? (int)$_POST['garantia_dias'] : null),
-  'preco'         => money_to_decimal($_POST['preco'] ?? 0),
+  'preco'         => money_to_decimal($_POST['preco'] ?? ''),
   'custo'         => money_to_decimal($_POST['custo'] ?? 0),
   'descricao'     => trim($_POST['descricao'] ?? ''),
   'status'        => (int)($_POST['status'] ?? 1),
 ];
+if ($data['preco'] === null || $data['preco'] < 0) {
+  header('Location: /produto_form.php'.($id > 0 ? '?id='.$id.'&err=preco' : '?err=preco')); exit;
+}
+if ($data['sku'] === '') {
+  $data['sku'] = null;
+}
 
 try{
+  $cols = get_table_columns($pdo, 'hf_produtos');
+
   if ($id>0) {
     $check = $pdo->prepare("SELECT id FROM hf_produtos WHERE id=:id AND tenant_id=:tid AND deleted_at IS NULL LIMIT 1");
     $check->execute([':id'=>$id, ':tid'=>$tid]);
@@ -64,33 +97,66 @@ try{
       redirect_produto_seguro('/produtos.php');
     }
 
+    $setParts = ["nome=:nome"];
+    $bind = [':nome'=>$nome];
+    $optionalMap = [
+      'sku' => 'sku',
+      'categoria' => 'categoria',
+      'unidade' => 'unidade',
+      'ncm' => 'ncm',
+      'garantia_dias' => 'garantia_dias',
+      'preco' => 'preco',
+      'custo' => 'custo',
+      'descricao' => 'descricao',
+      'status' => 'status',
+    ];
+    foreach ($optionalMap as $col => $key) {
+      if (has_col($cols, $col)) {
+        $setParts[] = $col.'=:'.$key;
+        $bind[':'.$key] = $data[$key];
+      }
+    }
+
     $sql = "UPDATE hf_produtos
-            SET nome=:nome, sku=:sku, categoria=:categoria, unidade=:unidade, ncm=:ncm,
-                garantia_dias=:garantia_dias, preco=:preco, custo=:custo,
-                descricao=:descricao, status=:status
+            SET ".implode(', ', $setParts)."
             WHERE id=:id AND tenant_id=:tid AND deleted_at IS NULL";
     $st = $pdo->prepare($sql);
-    $ok = $st->execute([
-      ':nome'=>$nome, ':sku'=>$data['sku'], ':categoria'=>$data['categoria'],
-      ':unidade'=>$data['unidade'], ':ncm'=>$data['ncm'], ':garantia_dias'=>$data['garantia_dias'],
-      ':preco'=>$data['preco'], ':custo'=>$data['custo'], ':descricao'=>$data['descricao'],
-      ':status'=>$data['status'], ':id'=>$id, ':tid'=>$tid
-    ]);
+    $bind[':id'] = $id;
+    $bind[':tid'] = $tid;
+    $ok = $st->execute($bind);
   } else {
+    $insertCols = ['tenant_id', 'nome'];
+    $insertVals = [':tid', ':nome'];
+    $bind = [':tid'=>$tid, ':nome'=>$nome];
+
+    $optionalMap = [
+      'sku' => 'sku',
+      'categoria' => 'categoria',
+      'unidade' => 'unidade',
+      'ncm' => 'ncm',
+      'garantia_dias' => 'garantia_dias',
+      'preco' => 'preco',
+      'custo' => 'custo',
+      'descricao' => 'descricao',
+      'status' => 'status',
+    ];
+    foreach ($optionalMap as $col => $key) {
+      if (has_col($cols, $col)) {
+        $insertCols[] = $col;
+        $insertVals[] = ':'.$key;
+        $bind[':'.$key] = $data[$key];
+      }
+    }
+
     $sql = "INSERT INTO hf_produtos
-      (tenant_id, nome, sku, categoria, unidade, ncm, garantia_dias, preco, custo, descricao, status)
+      (".implode(', ', $insertCols).")
       VALUES
-      (:tid, :nome, :sku, :categoria, :unidade, :ncm, :garantia_dias, :preco, :custo, :descricao, :status)";
+      (".implode(', ', $insertVals).")";
     $st = $pdo->prepare($sql);
-    $ok = $st->execute([
-      ':tid'=>$tid, ':nome'=>$nome, ':sku'=>$data['sku'], ':categoria'=>$data['categoria'],
-      ':unidade'=>$data['unidade'], ':ncm'=>$data['ncm'], ':garantia_dias'=>$data['garantia_dias'],
-      ':preco'=>$data['preco'], ':custo'=>$data['custo'], ':descricao'=>$data['descricao'],
-      ':status'=>$data['status']
-    ]);
+    $ok = $st->execute($bind);
     $id = (int)$pdo->lastInsertId();
   }
-} catch(Exception $e){
+} catch(Throwable $e){
   error_log('produto_save.php erro ao salvar: '.$e->getMessage());
   redirect_produto_seguro($id > 0 ? '/produto_form.php?id='.$id.'&err=save' : '/produto_form.php?err=save');
 }

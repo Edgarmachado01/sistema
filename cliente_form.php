@@ -65,8 +65,9 @@ if ($id>0) {
               <input class="form-control" name="nome" required maxlength="150" value="<?= htmlspecialchars($row['nome']) ?>">
             </div>
             <div class="col-md-3">
-              <label class="form-label">Documento (CPF/CNPJ)</label>
+              <label class="form-label">Documento (CPF/CNPJ) <span class="text-muted fw-normal">(Recomendado)</span></label>
               <input class="form-control" name="documento" maxlength="20" value="<?= htmlspecialchars($row['documento']) ?>">
+              <div class="form-text">Se preenchido, deve conter CPF (11) ou CNPJ (14) válidos em quantidade de dígitos.</div>
             </div>
             <div class="col-md-3">
               <label class="form-label">Status</label>
@@ -94,8 +95,8 @@ if ($id>0) {
               <input type="email" class="form-control" name="email" maxlength="120" value="<?= htmlspecialchars($row['email']) ?>">
             </div>
             <div class="col-md-4">
-              <label class="form-label">Telefone</label>
-              <input class="form-control" name="telefone" maxlength="30" value="<?= htmlspecialchars($row['telefone']) ?>">
+              <label class="form-label">Telefone*</label>
+              <input class="form-control" name="telefone" required maxlength="30" value="<?= htmlspecialchars($row['telefone']) ?>">
             </div>
             <div class="col-md-4">
               <label class="form-label">Celular</label>

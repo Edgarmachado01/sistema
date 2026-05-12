@@ -1,5 +1,5 @@
 <?php
-// os_foto_upload.php — Upload assíncrono de fotos da OS
+// os_foto_upload.php - Upload assincrono de fotos da OS
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -35,6 +35,8 @@ function makeImageFromUpload($path)
             return function_exists('imagecreatefrompng') ? @imagecreatefrompng($path) : null;
         case 'image/gif':
             return function_exists('imagecreatefromgif') ? @imagecreatefromgif($path) : null;
+        case 'image/webp':
+            return function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($path) : null;
         default:
             return null;
     }
@@ -67,7 +69,7 @@ function saveJpegResized($srcPath, $dstPath, $maxW = 1600, $maxH = 1600, $qualit
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    jsonOut(false, 'Método inválido.');
+    jsonOut(false, 'Metodo invalido.');
 }
 
 $sessionToken = (string)($_SESSION['csrf_token'] ?? '');
@@ -80,7 +82,7 @@ if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $po
 
 if (!function_exists('imagecreatetruecolor') || !function_exists('imagejpeg')) {
     http_response_code(500);
-    jsonOut(false, 'Biblioteca de imagens indisponível.');
+    jsonOut(false, 'Nao foi possivel processar as imagens no momento. Tente novamente.');
 }
 
 $pdo = db();
@@ -89,12 +91,12 @@ $osId = (int)($_POST['os_id'] ?? 0);
 
 if ($tid <= 0) {
     http_response_code(400);
-    jsonOut(false, 'Tenant inválido.');
+    jsonOut(false, 'Nao foi possivel identificar a empresa ativa.');
 }
 
 if ($osId <= 0) {
     http_response_code(400);
-    jsonOut(false, 'OS inválida.');
+    jsonOut(false, 'OS invalida para upload de fotos.');
 }
 
 try {
@@ -109,28 +111,28 @@ try {
     $st->execute([':id' => $osId, ':t' => $tid]);
     if (!$st->fetch(PDO::FETCH_ASSOC)) {
         http_response_code(404);
-        jsonOut(false, 'OS não encontrada.');
+        jsonOut(false, 'OS nao encontrada para upload.');
     }
 } catch (Throwable $e) {
     http_response_code(500);
-    jsonOut(false, 'Erro ao validar OS.');
+    jsonOut(false, 'Nao foi possivel validar a OS para upload.');
 }
 
 if (empty($_FILES['fotos']) || !isset($_FILES['fotos']['tmp_name']) || !is_array($_FILES['fotos']['tmp_name'])) {
     http_response_code(400);
-    jsonOut(false, 'Nenhuma foto enviada.');
+    jsonOut(false, 'Nenhuma foto foi enviada.');
 }
 
 $maxFiles = 10;
 $maxBytes = 2 * 1024 * 1024;
-$allowedMimes = ['image/jpeg', 'image/png', 'image/gif'];
+$allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 $baseDir = __DIR__ . '/uploads/os/' . $tid . '/' . date('Y') . '/' . date('m') . '/' . $osId . '/';
 $thumbDir = $baseDir . 'thumbs/';
 
 if (!is_dir($thumbDir) && !@mkdir($thumbDir, 0775, true) && !is_dir($thumbDir)) {
     http_response_code(500);
-    jsonOut(false, 'Não foi possível criar a pasta de upload.');
+    jsonOut(false, 'Nao foi possivel preparar o envio das fotos.');
 }
 
 try {
@@ -144,7 +146,7 @@ try {
     ");
 } catch (Throwable $e) {
     http_response_code(500);
-    jsonOut(false, 'Erro ao preparar gravação das fotos.');
+    jsonOut(false, 'Nao foi possivel preparar o upload das fotos.');
 }
 
 $fotos = [];
@@ -158,19 +160,19 @@ for ($i = 0; $i < $count; $i++) {
     $error = (int)($_FILES['fotos']['error'][$i] ?? UPLOAD_ERR_NO_FILE);
 
     if ($error !== UPLOAD_ERR_OK || !$tmp || !is_uploaded_file($tmp)) {
-        $errors[] = $name !== '' ? $name : 'Arquivo inválido';
+        $errors[] = $name !== '' ? $name : 'Arquivo invalido';
         continue;
     }
 
     if ($size <= 0 || $size > $maxBytes) {
-        $errors[] = $name !== '' ? $name : 'Arquivo acima do limite';
+        $errors[] = $name !== '' ? $name . ' (acima de 2MB)' : 'Arquivo acima de 2MB';
         continue;
     }
 
     $info = @getimagesize($tmp);
     $mime = $info['mime'] ?? '';
     if (!$info || !in_array($mime, $allowedMimes, true)) {
-        $errors[] = $name !== '' ? $name : 'Tipo inválido';
+        $errors[] = $name !== '' ? $name . ' (formato nao suportado)' : 'Formato nao suportado';
         continue;
     }
 
@@ -222,10 +224,10 @@ for ($i = 0; $i < $count; $i++) {
 
 if (empty($fotos)) {
     http_response_code(400);
-    jsonOut(false, 'Nenhuma foto válida foi enviada.');
+    jsonOut(false, 'Nenhuma foto valida foi enviada. Verifique tamanho (maximo 2MB) e formato.');
 }
 
-$msg = 'Upload concluído.';
+$msg = 'Upload concluido.';
 if (!empty($errors)) {
     $msg .= ' Alguns arquivos foram ignorados.';
 }

@@ -121,7 +121,7 @@ if ($id>0) {
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label">Preço (R$)</label>
-              <input type="text" class="form-control hf-money-input" name="preco" inputmode="decimal" value="<?= number_format((float)$row['preco'],2,',','.') ?>">
+              <input type="text" class="form-control hf-money-input" name="preco" inputmode="decimal" required value="<?= number_format((float)$row['preco'],2,',','.') ?>">
             </div>
             <div class="col-md-4">
               <label class="form-label">Custo (R$)</label>

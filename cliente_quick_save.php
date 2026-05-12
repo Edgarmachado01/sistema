@@ -44,19 +44,64 @@ $documento = preg_replace('/\D+/','', $_POST['documento'] ?? '');
 if ($nome===''){
   quick_json(['ok'=>false,'msg'=>'Informe o nome']);
 }
+if ($celular===''){
+  quick_json(['ok'=>false,'msg'=>'Informe o telefone']);
+}
+if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+  quick_json(['ok'=>false,'msg'=>'E-mail inválido']);
+}
+if ($documento !== '') {
+  if (!in_array(strlen($documento), [11, 14], true)) {
+    quick_json(['ok'=>false,'msg'=>'CPF/CNPJ inválido']);
+  }
+}
 
 try{
-  $st = $pdo->prepare("
-    INSERT INTO hf_clientes (tenant_id,nome,documento,email,celular,status)
-    VALUES (:tid,:nome,:doc,:email,:cel,1)
-  ");
-  $st->execute([
-    ':tid'=>$tid,
-    ':nome'=>$nome,
-    ':doc'=>$documento ?: null,
-    ':email'=>$email ?: null,
-    ':cel'=>$celular ?: null
-  ]);
+  // Compatibilidade entre schemas: alguns ambientes exigem telefone.
+  $salvo = false;
+  $tentativas = [
+    [
+      'sql' => "INSERT INTO hf_clientes (tenant_id,nome,documento,email,telefone,celular,status)
+                VALUES (:tid,:nome,:doc,:email,:tel,:cel,1)",
+      'params' => [
+        ':tid'   => $tid,
+        ':nome'  => $nome,
+        ':doc'   => $documento ?: null,
+        ':email' => $email ?: null,
+        ':tel'   => $celular ?: null,
+        ':cel'   => $celular ?: null,
+      ],
+    ],
+    [
+      'sql' => "INSERT INTO hf_clientes (tenant_id,nome,documento,email,celular,status)
+                VALUES (:tid,:nome,:doc,:email,:cel,1)",
+      'params' => [
+        ':tid'   => $tid,
+        ':nome'  => $nome,
+        ':doc'   => $documento ?: null,
+        ':email' => $email ?: null,
+        ':cel'   => $celular ?: null,
+      ],
+    ],
+  ];
+
+  foreach ($tentativas as $t) {
+    try {
+      $st = $pdo->prepare($t['sql']);
+      $st->execute($t['params']);
+      $salvo = true;
+      break;
+    } catch (Throwable $eTentativa) {
+      $msg = strtolower((string)$eTentativa->getMessage());
+      if (strpos($msg, 'unknown column') === false) {
+        throw $eTentativa;
+      }
+    }
+  }
+
+  if (!$salvo) {
+    throw new RuntimeException('Falha ao salvar cliente rápido');
+  }
 
   quick_json(['ok'=>true,'id'=>(int)$pdo->lastInsertId(),'nome'=>$nome]);
 } catch(Exception $e){

@@ -43,6 +43,14 @@ if (!function_exists('hfAdminSubStatusLabel')) {
     }
 }
 
+if (!function_exists('hfAdminSubAnnualCents')) {
+    function hfAdminSubAnnualCents($monthlyCents)
+    {
+        $monthlyCents = max(0, (int)$monthlyCents);
+        return $monthlyCents > 0 ? $monthlyCents * 10 : 0;
+    }
+}
+
 if (!function_exists('hfAdminSubScalar')) {
     function hfAdminSubScalar(PDO $pdo, $sql, array $params = [])
     {
@@ -145,16 +153,16 @@ if (!in_array($filter, $allowedFilters, true)) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim((string)($_POST['action'] ?? ''));
+    $sessionToken = (string)($_SESSION['SAAS_ADMIN_SUBS_CSRF'] ?? '');
+    $postToken = (string)($_POST['csrf_token'] ?? '');
+
+    if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
+        $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Sessao expirada. Recarregue e tente novamente.';
+        header('Location: /admin_subscriptions.php');
+        exit;
+    }
+
     if ($action === 'confirm_payment') {
-        $sessionToken = (string)($_SESSION['SAAS_ADMIN_SUBS_CSRF'] ?? '');
-        $postToken = (string)($_POST['csrf_token'] ?? '');
-
-        if ($sessionToken === '' || $postToken === '' || !hash_equals($sessionToken, $postToken)) {
-            $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Sessao expirada. Recarregue e tente novamente.';
-            header('Location: /admin_subscriptions.php');
-            exit;
-        }
-
         $tenantId = (int)($_POST['tenant_id'] ?? 0);
         $billingCycle = trim((string)($_POST['billing_cycle'] ?? 'mensal'));
         if ($tenantId <= 0 || !in_array($billingCycle, ['mensal', 'anual'], true)) {
@@ -222,6 +230,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: /admin_subscriptions.php');
             exit;
         }
+    } elseif ($action === 'deactivate_tenant') {
+        $tenantId = (int)($_POST['tenant_id'] ?? 0);
+        $confirmDeactivate = trim((string)($_POST['confirm_deactivate'] ?? ''));
+        if ($tenantId <= 0 || $confirmDeactivate !== '1') {
+            $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Dados de desativacao invalidos.';
+            header('Location: /admin_subscriptions.php');
+            exit;
+        }
+
+        try {
+            $pdo->beginTransaction();
+
+            $stmtTenant = $pdo->prepare("
+                SELECT id, name, is_active
+                FROM tenants
+                WHERE id = :tenant_id
+                LIMIT 1
+            ");
+            $stmtTenant->execute([':tenant_id' => $tenantId]);
+            $tenant = $stmtTenant->fetch(PDO::FETCH_ASSOC);
+
+            if (!$tenant) {
+                $pdo->rollBack();
+                $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Empresa nao encontrada para desativacao.';
+                header('Location: /admin_subscriptions.php');
+                exit;
+            }
+
+            $stmtDeactivateTenant = $pdo->prepare("
+                UPDATE tenants
+                SET is_active = 0
+                WHERE id = :tenant_id
+            ");
+            $stmtDeactivateTenant->execute([':tenant_id' => $tenantId]);
+
+            $stmtLatest = $pdo->prepare("
+                SELECT id
+                FROM tenant_subscriptions
+                WHERE tenant_id = :tenant_id
+                ORDER BY id DESC
+                LIMIT 1
+            ");
+            $stmtLatest->execute([':tenant_id' => $tenantId]);
+            $latestSubscriptionId = (int)$stmtLatest->fetchColumn();
+
+            if ($latestSubscriptionId > 0) {
+                $stmtBlock = $pdo->prepare("
+                    UPDATE tenant_subscriptions
+                    SET status = 'bloqueado',
+                        blocked_at = NOW(),
+                        cancelled_at = NULL,
+                        updated_at = NOW()
+                    WHERE id = :id
+                      AND tenant_id = :tenant_id
+                ");
+                $stmtBlock->execute([
+                    ':id' => $latestSubscriptionId,
+                    ':tenant_id' => $tenantId,
+                ]);
+            }
+
+            $pdo->commit();
+
+            $_SESSION['SAAS_ADMIN_FLASH_SUCCESS'] = 'Cliente desativado com sucesso. O acesso por login foi bloqueado.';
+            header('Location: /admin_subscriptions.php');
+            exit;
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('admin_subscriptions.php deactivate_tenant: '.$e->getMessage());
+            $_SESSION['SAAS_ADMIN_FLASH_ERROR'] = 'Nao foi possivel desativar o cliente agora.';
+            header('Location: /admin_subscriptions.php');
+            exit;
+        }
     }
 }
 
@@ -237,13 +320,10 @@ $latestSubscriptionSql = "
 
 $plans = [];
 $metrics = [
-    'total' => 0,
-    'trials_active' => 0,
+    'total_clients' => 0,
     'active' => 0,
-    'expired' => 0,
-    'blocked' => 0,
-    'cortesia' => 0,
-    'potential_mrr_cents' => 0,
+    'trial' => 0,
+    'blocked_or_cancelled' => 0,
 ];
 $subscriptions = [];
 
@@ -255,45 +335,24 @@ try {
         ORDER BY monthly_price_cents ASC, name ASC
     ");
 
-    $metrics['total'] = (int)hfAdminSubScalar($pdo, "
+    $metrics['total_clients'] = (int)hfAdminSubScalar($pdo, "
         SELECT COUNT(*)
         FROM ({$latestSubscriptionSql}) ts
     ");
-    $metrics['trials_active'] = (int)hfAdminSubScalar($pdo, "
+    $metrics['trial'] = (int)hfAdminSubScalar($pdo, "
         SELECT COUNT(*)
         FROM ({$latestSubscriptionSql}) ts
-        JOIN plans p ON p.id = ts.plan_id
         WHERE ts.status = 'trial'
-          AND p.code <> 'cortesia'
-          AND (ts.trial_end_at IS NULL OR ts.trial_end_at >= NOW())
     ");
     $metrics['active'] = (int)hfAdminSubScalar($pdo, "
         SELECT COUNT(*)
         FROM ({$latestSubscriptionSql}) ts
         WHERE ts.status = 'ativo'
     ");
-    $metrics['expired'] = (int)hfAdminSubScalar($pdo, "
+    $metrics['blocked_or_cancelled'] = (int)hfAdminSubScalar($pdo, "
         SELECT COUNT(*)
         FROM ({$latestSubscriptionSql}) ts
-        WHERE ts.status = 'vencido'
-    ");
-    $metrics['blocked'] = (int)hfAdminSubScalar($pdo, "
-        SELECT COUNT(*)
-        FROM ({$latestSubscriptionSql}) ts
-        WHERE ts.status = 'bloqueado'
-    ");
-    $metrics['cortesia'] = (int)hfAdminSubScalar($pdo, "
-        SELECT COUNT(*)
-        FROM ({$latestSubscriptionSql}) ts
-        JOIN plans p ON p.id = ts.plan_id
-        WHERE p.code = 'cortesia'
-    ");
-    $metrics['potential_mrr_cents'] = (int)hfAdminSubScalar($pdo, "
-        SELECT COALESCE(SUM(COALESCE(p.monthly_price_cents, 0)), 0)
-        FROM ({$latestSubscriptionSql}) ts
-        JOIN plans p ON p.id = ts.plan_id
-        WHERE ts.status IN ('trial', 'ativo')
-          AND p.code <> 'cortesia'
+        WHERE ts.status IN ('bloqueado', 'cancelado')
     ");
 
     $osDateCol = hfAdminSubPickColumn($pdo, 'hf_os', ['data_abertura', 'created_at']);
@@ -357,6 +416,18 @@ try {
             t.id AS tenant_id,
             t.name AS tenant_name,
             t.slug,
+            tc.email AS tenant_email,
+            tc.whatsapp AS tenant_whatsapp,
+            tc.telefone AS tenant_phone,
+            tc.cnpj AS tenant_cnpj,
+            (
+                SELECT u.email
+                FROM users u
+                WHERE u.tenant_id = t.id
+                  AND u.is_active = 1
+                ORDER BY u.id ASC
+                LIMIT 1
+            ) AS admin_email,
             p.name AS plan_name,
             p.code AS plan_code,
             p.monthly_price_cents,
@@ -375,6 +446,7 @@ try {
         FROM tenants t
         JOIN ({$latestSubscriptionSql}) ts ON ts.tenant_id = t.id
         JOIN plans p ON p.id = ts.plan_id
+        LEFT JOIN tenant_config tc ON tc.tenant_id = t.id
         {$whereSql}
         ORDER BY
             CASE
@@ -397,17 +469,50 @@ require_once __DIR__.'/_admin_layout_start.php';
 ?>
 
 <style>
+  .hf-admin-sub-page {
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  .hf-admin-sub-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .9rem;
+  }
+
+  .hf-admin-sub-summary .hf-admin-card {
+    padding: .95rem 1rem;
+  }
+
+  .hf-admin-sub-summary small {
+    display: block;
+    color: #64748b;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: .72rem;
+  }
+
+  .hf-admin-sub-summary strong {
+    display: block;
+    margin-top: .45rem;
+    color: #0f172a;
+    font-size: 1.35rem;
+    font-weight: 950;
+  }
+
   .hf-admin-sub-filter-grid {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 180px 180px 220px auto;
+    grid-template-columns: minmax(220px, 1fr) 170px 170px 200px auto;
     gap: .75rem;
     align-items: end;
   }
 
   .hf-sub-company {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: .65rem;
+    align-items: start;
   }
 
   .hf-sub-avatar {
@@ -421,6 +526,36 @@ require_once __DIR__.'/_admin_layout_start.php';
     color: #fff;
     background: linear-gradient(135deg, #0d6efd, #14b8a6);
     font-weight: 900;
+  }
+
+  .hf-sub-company-meta {
+    display: grid;
+    gap: .2rem;
+  }
+
+  .hf-sub-company-meta .name {
+    font-weight: 850;
+    color: #0f172a;
+    line-height: 1.2;
+  }
+
+  .hf-sub-company-meta .slug {
+    color: #64748b;
+    font-size: .78rem;
+  }
+
+  .hf-sub-contact {
+    display: grid;
+    gap: .15rem;
+    margin-top: .35rem;
+    color: #475569;
+    font-size: .76rem;
+  }
+
+  .hf-sub-contact span {
+    display: inline-flex;
+    align-items: center;
+    gap: .28rem;
   }
 
   .hf-plan-badge {
@@ -465,39 +600,180 @@ require_once __DIR__.'/_admin_layout_start.php';
 
   .hf-sub-actions {
     display: inline-flex;
-    flex-direction: column;
-    gap: .45rem;
-    align-items: flex-end;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: .35rem;
+    min-width: 150px;
+  }
+
+  .hf-sub-actions form {
+    margin: 0;
   }
 
   .hf-sub-confirm-form {
     display: inline-flex;
     gap: .35rem;
     align-items: center;
-    justify-content: flex-end;
+    margin: 0;
   }
 
   .hf-sub-confirm-form .form-select {
-    min-width: 110px;
-    font-size: .76rem;
+    width: 92px;
+    font-size: .72rem;
     padding-top: .26rem;
     padding-bottom: .26rem;
   }
 
+  .hf-sub-action-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: .6rem;
+  }
+
+  .hf-sub-period {
+    display: grid;
+    gap: .35rem;
+    font-size: .78rem;
+    color: #475569;
+  }
+
+  .hf-sub-period div {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
+  }
+
+  .hf-sub-usage {
+    display: grid;
+    gap: .3rem;
+    font-size: .78rem;
+    color: #334155;
+  }
+
+  .hf-sub-usage div {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .25rem;
+    white-space: nowrap;
+  }
+
+  .hf-sub-value {
+    display: grid;
+    gap: .25rem;
+    text-align: right;
+  }
+
+  .hf-sub-value .monthly {
+    font-size: .92rem;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .hf-sub-value .annual {
+    font-size: .8rem;
+    color: #475569;
+    font-weight: 700;
+  }
+
+  .hf-admin-sub-table tr.status-trial {
+    background: linear-gradient(90deg, rgba(13, 110, 253, .04), transparent 65%);
+  }
+
+  .hf-admin-sub-table tr.status-vencido {
+    background: linear-gradient(90deg, rgba(245, 158, 11, .07), transparent 65%);
+  }
+
+  .hf-admin-sub-table tr.status-bloqueado,
+  .hf-admin-sub-table tr.status-cancelado {
+    background: linear-gradient(90deg, rgba(220, 38, 38, .06), transparent 65%);
+  }
+
+  .hf-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .25rem .55rem;
+    border-radius: 999px;
+    font-size: .76rem;
+    font-weight: 850;
+    border: 1px solid transparent;
+    background: #f1f5f9;
+    color: #334155;
+  }
+
+  .hf-status-pill.is-trial {
+    color: #075985;
+    border-color: rgba(2, 132, 199, .24);
+    background: rgba(2, 132, 199, .10);
+  }
+
+  .hf-status-pill.is-ativo {
+    color: #166534;
+    border-color: rgba(22, 163, 74, .24);
+    background: rgba(22, 163, 74, .10);
+  }
+
+  .hf-status-pill.is-vencido {
+    color: #92400e;
+    border-color: rgba(245, 158, 11, .24);
+    background: rgba(245, 158, 11, .12);
+  }
+
+  .hf-status-pill.is-bloqueado,
+  .hf-status-pill.is-cancelado {
+    color: #991b1b;
+    border-color: rgba(220, 38, 38, .24);
+    background: rgba(220, 38, 38, .10);
+  }
+
+  .hf-admin-sub-table th,
+  .hf-admin-sub-table td {
+    vertical-align: top;
+  }
+
+  @media (max-width: 992px) {
+    .hf-admin-sub-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hf-sub-actions {
+      min-width: 132px;
+    }
+  }
+
   @media (max-width: 1160px) {
     .hf-admin-sub-filter-grid {
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
     }
   }
 
   @media (max-width: 700px) {
+    .hf-admin-sub-summary {
+      grid-template-columns: 1fr;
+    }
+
     .hf-admin-sub-filter-grid {
       grid-template-columns: 1fr;
+    }
+
+    .hf-sub-actions {
+      min-width: 120px;
+    }
+
+    .hf-sub-confirm-form .form-select {
+      width: 78px;
     }
   }
 </style>
 
-<div class="d-flex flex-column gap-4">
+<div class="d-flex flex-column gap-4 hf-admin-sub-page">
   <section class="hf-admin-card p-4">
     <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
       <div>
@@ -523,41 +799,22 @@ require_once __DIR__.'/_admin_layout_start.php';
     </div>
   <?php endif; ?>
 
-  <section class="hf-admin-kpis">
-    <article class="hf-admin-card hf-admin-kpi">
-      <small><i class="bi bi-credit-card-2-front text-primary"></i>Total assinaturas</small>
-      <strong><?= number_format((int)$metrics['total'], 0, ',', '.') ?></strong>
-      <span>Assinaturas atuais</span>
+  <section class="hf-admin-sub-summary">
+    <article class="hf-admin-card">
+      <small><i class="bi bi-buildings text-primary"></i>Total de clientes</small>
+      <strong><?= number_format((int)$metrics['total_clients'], 0, ',', '.') ?></strong>
     </article>
-    <article class="hf-admin-card hf-admin-kpi">
-      <small><i class="bi bi-hourglass-split text-primary"></i>Trials ativos</small>
-      <strong><?= number_format((int)$metrics['trials_active'], 0, ',', '.') ?></strong>
-      <span>Empresas em teste</span>
-    </article>
-    <article class="hf-admin-card hf-admin-kpi">
-      <small><i class="bi bi-check2-circle text-success"></i>Ativas</small>
+    <article class="hf-admin-card">
+      <small><i class="bi bi-check2-circle text-success"></i>Clientes ativos</small>
       <strong><?= number_format((int)$metrics['active'], 0, ',', '.') ?></strong>
-      <span>Assinaturas liberadas</span>
     </article>
-    <article class="hf-admin-card hf-admin-kpi">
-      <small><i class="bi bi-exclamation-circle text-warning"></i>Vencidas</small>
-      <strong><?= number_format((int)$metrics['expired'], 0, ',', '.') ?></strong>
-      <span>Precisam de atencao</span>
+    <article class="hf-admin-card">
+      <small><i class="bi bi-hourglass-split text-info"></i>Em trial</small>
+      <strong><?= number_format((int)$metrics['trial'], 0, ',', '.') ?></strong>
     </article>
-    <article class="hf-admin-card hf-admin-kpi">
-      <small><i class="bi bi-lock text-danger"></i>Bloqueadas</small>
-      <strong><?= number_format((int)$metrics['blocked'], 0, ',', '.') ?></strong>
-      <span>Status comercial bloqueado</span>
-    </article>
-    <article class="hf-admin-card hf-admin-kpi">
-      <small><i class="bi bi-stars text-primary"></i>Cortesia</small>
-      <strong><?= number_format((int)$metrics['cortesia'], 0, ',', '.') ?></strong>
-      <span>Sem cobranca</span>
-    </article>
-    <article class="hf-admin-card hf-admin-kpi">
-      <small><i class="bi bi-graph-up-arrow text-success"></i>MRR potencial</small>
-      <strong><?= htmlspecialchars(hfAdminSubMoney($metrics['potential_mrr_cents']), ENT_QUOTES, 'UTF-8') ?></strong>
-      <span>Ativas + trials pagos</span>
+    <article class="hf-admin-card">
+      <small><i class="bi bi-shield-exclamation text-danger"></i>Bloqueados/Cancelados</small>
+      <strong><?= number_format((int)$metrics['blocked_or_cancelled'], 0, ',', '.') ?></strong>
     </article>
   </section>
 
@@ -624,27 +881,22 @@ require_once __DIR__.'/_admin_layout_start.php';
 
   <section class="hf-admin-card">
     <div class="table-responsive">
-      <table class="table hf-admin-table">
+      <table class="table hf-admin-table hf-admin-sub-table">
         <thead>
           <tr>
-            <th>Empresa</th>
+            <th>Empresa e contato</th>
             <th>Plano</th>
             <th>Status</th>
-            <th>Inicio trial</th>
-            <th>Fim trial</th>
-            <th>Fim periodo</th>
-            <th>Ciclo</th>
-            <th class="text-end">Valor mensal</th>
-            <th class="text-end">Valor anual</th>
-            <th class="text-end">Usuarios</th>
-            <th class="text-end">OS mes</th>
+            <th>Periodo</th>
+            <th class="text-end">Uso</th>
+            <th class="text-end">Valores</th>
             <th class="text-end">Acoes</th>
           </tr>
         </thead>
         <tbody>
           <?php if (!$subscriptions): ?>
             <tr>
-              <td colspan="12" class="text-center text-muted py-4">Nenhuma assinatura encontrada.</td>
+              <td colspan="7" class="text-center text-muted py-4">Nenhuma assinatura encontrada.</td>
             </tr>
           <?php endif; ?>
 
@@ -656,21 +908,44 @@ require_once __DIR__.'/_admin_layout_start.php';
               $planCode = trim((string)($item['plan_code'] ?? ''));
               $isCortesia = $planCode === 'cortesia';
               $monthlyCents = (int)($item['monthly_price_cents'] ?? 0);
-              $annualCents = $monthlyCents > 0 ? ($monthlyCents * 10) : 0;
+              $annualCents = hfAdminSubAnnualCents($monthlyCents);
               $cycleLabel = hfAdminSubCycleLabel(
                   $item['current_period_start'] ?? null,
                   $item['current_period_end'] ?? null,
                   $statusValue,
                   $planCode
               );
+              $tenantEmail = trim((string)($item['tenant_email'] ?? ''));
+              if ($tenantEmail === '') {
+                  $tenantEmail = trim((string)($item['admin_email'] ?? ''));
+              }
+              $tenantPhone = trim((string)($item['tenant_whatsapp'] ?? ''));
+              if ($tenantPhone === '') {
+                  $tenantPhone = trim((string)($item['tenant_phone'] ?? ''));
+              }
+              $tenantDocument = trim((string)($item['tenant_cnpj'] ?? ''));
+              $statusRowClass = in_array($statusValue, ['trial', 'ativo', 'vencido', 'bloqueado', 'cancelado'], true)
+                ? 'status-'.$statusValue
+                : '';
             ?>
-            <tr>
+            <tr class="<?= htmlspecialchars($statusRowClass, ENT_QUOTES, 'UTF-8') ?>">
               <td>
                 <div class="hf-sub-company">
                   <span class="hf-sub-avatar"><?= htmlspecialchars($initial, ENT_QUOTES, 'UTF-8') ?></span>
-                  <div>
-                    <div class="fw-bold"><?= htmlspecialchars($tenantName !== '' ? $tenantName : 'Empresa #'.(int)$item['tenant_id'], ENT_QUOTES, 'UTF-8') ?></div>
-                    <div class="text-muted small"><?= htmlspecialchars((string)($item['slug'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
+                  <div class="hf-sub-company-meta">
+                    <div class="name"><?= htmlspecialchars($tenantName !== '' ? $tenantName : 'Empresa #'.(int)$item['tenant_id'], ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="slug"><?= htmlspecialchars((string)($item['slug'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="hf-sub-contact">
+                      <?php if ($tenantEmail !== ''): ?>
+                        <span><i class="bi bi-envelope"></i><?= htmlspecialchars($tenantEmail, ENT_QUOTES, 'UTF-8') ?></span>
+                      <?php endif; ?>
+                      <?php if ($tenantPhone !== ''): ?>
+                        <span><i class="bi bi-telephone"></i><?= htmlspecialchars($tenantPhone, ENT_QUOTES, 'UTF-8') ?></span>
+                      <?php endif; ?>
+                      <?php if ($tenantDocument !== ''): ?>
+                        <span><i class="bi bi-card-text"></i><?= htmlspecialchars($tenantDocument, ENT_QUOTES, 'UTF-8') ?></span>
+                      <?php endif; ?>
+                    </div>
                   </div>
                 </div>
               </td>
@@ -685,14 +960,25 @@ require_once __DIR__.'/_admin_layout_start.php';
                   <?= htmlspecialchars(hfAdminSubStatusLabel($statusValue), ENT_QUOTES, 'UTF-8') ?>
                 </span>
               </td>
-              <td><?= htmlspecialchars(hfAdminSubDate($item['trial_start_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
-              <td><?= htmlspecialchars($isCortesia ? '-' : hfAdminSubDate($item['trial_end_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
-              <td><?= htmlspecialchars($isCortesia ? '-' : hfAdminSubDate($item['current_period_end'] ?? null), ENT_QUOTES, 'UTF-8') ?></td>
-              <td><?= htmlspecialchars($cycleLabel, ENT_QUOTES, 'UTF-8') ?></td>
-              <td class="text-end fw-bold"><?= htmlspecialchars(hfAdminSubMoney($monthlyCents), ENT_QUOTES, 'UTF-8') ?></td>
-              <td class="text-end fw-bold"><?= htmlspecialchars($isCortesia ? '-' : hfAdminSubMoney($annualCents), ENT_QUOTES, 'UTF-8') ?></td>
-              <td class="text-end fw-bold"><?= number_format((int)($item['active_users'] ?? 0), 0, ',', '.') ?></td>
-              <td class="text-end fw-bold"><?= number_format((int)($item['monthly_os_count'] ?? 0), 0, ',', '.') ?></td>
+              <td>
+                <div class="hf-sub-period">
+                  <div><i class="bi bi-arrow-repeat"></i><?= htmlspecialchars($cycleLabel, ENT_QUOTES, 'UTF-8') ?></div>
+                  <div><i class="bi bi-hourglass-split"></i>Trial ate: <?= htmlspecialchars($isCortesia ? '-' : hfAdminSubDate($item['trial_end_at'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+                  <div><i class="bi bi-calendar-event"></i>Vencimento: <?= htmlspecialchars($isCortesia ? '-' : hfAdminSubDate($item['current_period_end'] ?? null), ENT_QUOTES, 'UTF-8') ?></div>
+                </div>
+              </td>
+              <td class="text-end">
+                <div class="hf-sub-usage">
+                  <div><i class="bi bi-people"></i><?= number_format((int)($item['active_users'] ?? 0), 0, ',', '.') ?> usuarios</div>
+                  <div><i class="bi bi-tools"></i><?= number_format((int)($item['monthly_os_count'] ?? 0), 0, ',', '.') ?> OS no mes</div>
+                </div>
+              </td>
+              <td class="text-end">
+                <div class="hf-sub-value">
+                  <span class="monthly"><?= htmlspecialchars(hfAdminSubMoney($monthlyCents), ENT_QUOTES, 'UTF-8') ?>/mes</span>
+                  <span class="annual"><?= htmlspecialchars($isCortesia ? '-' : hfAdminSubMoney($annualCents), ENT_QUOTES, 'UTF-8') ?>/ano</span>
+                </div>
+              </td>
               <td class="text-end">
                 <div class="hf-sub-actions">
                   <?php if (!$isCortesia): ?>
@@ -700,18 +986,48 @@ require_once __DIR__.'/_admin_layout_start.php';
                       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
                       <input type="hidden" name="action" value="confirm_payment">
                       <input type="hidden" name="tenant_id" value="<?= (int)$item['tenant_id'] ?>">
-                      <select class="form-select form-select-sm" name="billing_cycle">
+                      <select class="form-select form-select-sm" name="billing_cycle" aria-label="Ciclo de cobranca">
                         <option value="mensal" <?= $cycleLabel === 'Mensal' ? 'selected' : '' ?>>Mensal</option>
                         <option value="anual" <?= $cycleLabel === 'Anual' ? 'selected' : '' ?>>Anual</option>
                       </select>
-                      <button type="submit" class="btn btn-sm btn-success">
-                        <i class="bi bi-check2-circle me-1"></i>Confirmar
+                      <button
+                        type="submit"
+                        class="btn btn-sm btn-success hf-sub-action-btn"
+                        data-bs-toggle="tooltip"
+                        data-bs-placement="top"
+                        title="Confirmar pagamento"
+                        aria-label="Confirmar pagamento"
+                      >
+                        <i class="bi bi-check-circle"></i>
                       </button>
                     </form>
                   <?php endif; ?>
-                  <a class="btn btn-sm btn-outline-primary" href="/admin_tenant_form.php?id=<?= (int)$item['tenant_id'] ?>">
-                    <i class="bi bi-pencil-square me-1"></i>Editar
+                  <a
+                    class="btn btn-sm btn-primary hf-sub-action-btn"
+                    href="/admin_tenant_form.php?id=<?= (int)$item['tenant_id'] ?>"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                    title="Editar cliente"
+                    aria-label="Editar cliente"
+                  >
+                    <i class="bi bi-pencil-square"></i>
                   </a>
+                  <form method="post" onsubmit="return confirm('Desativar este cliente? O login da empresa sera bloqueado.');">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="action" value="deactivate_tenant">
+                    <input type="hidden" name="tenant_id" value="<?= (int)$item['tenant_id'] ?>">
+                    <input type="hidden" name="confirm_deactivate" value="1">
+                    <button
+                      type="submit"
+                      class="btn btn-sm btn-warning hf-sub-action-btn"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="top"
+                      title="Desativar cliente"
+                      aria-label="Desativar cliente"
+                    >
+                      <i class="bi bi-pause-circle"></i>
+                    </button>
+                  </form>
                 </div>
               </td>
             </tr>
@@ -721,5 +1037,18 @@ require_once __DIR__.'/_admin_layout_start.php';
     </div>
   </section>
 </div>
+
+<script>
+  (function () {
+    if (!window.bootstrap || !bootstrap.Tooltip) {
+      return;
+    }
+
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (el) {
+      bootstrap.Tooltip.getOrCreateInstance(el);
+    });
+  })();
+</script>
 
 <?php require_once __DIR__.'/_admin_layout_end.php'; ?>

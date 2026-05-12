@@ -288,7 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <input name="senha" type="password" class="form-control" autocomplete="current-password" required>
                         </div>
                         <div class="hf-login-links mt-2">
-                            <a href="/esqueci_senha.php">Esqueci minha senha</a>
+                            <a href="/esqueci_senha.php">Recuperar acesso</a>
                         </div>
                     </div>
 

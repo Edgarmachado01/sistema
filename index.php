@@ -2,6 +2,15 @@
 $siteTitle = 'HelpDesk Facil - Sistema para assistencias tecnicas';
 $siteDescription = 'Controle OS, clientes, produtos, servicos, financeiro e relatorios em um SaaS para assistencias tecnicas.';
 $whatsappUrl = 'https://wa.me/5500000000000?text=Quero%20conhecer%20o%20HelpDesk%20Facil';
+require_once __DIR__.'/db.php';
+require_once __DIR__.'/_public_plan_catalog.php';
+
+$publicPlans = hfPublicPlanCatalogFallback();
+try {
+    $publicPlans = hfPublicPlanCatalogFetch(db());
+} catch (Exception $e) {
+    error_log('index.php public plans: '.$e->getMessage());
+}
 
 include __DIR__.'/_site_start.php';
 ?>
@@ -293,39 +302,88 @@ include __DIR__.'/_site_start.php';
           <a class="btn hf-btn-secondary" href="/planos.php">Comparar todos os planos</a>
         </div>
 
+        <div class="hf-plan-proof" aria-label="Destaques comerciais">
+          <span><i class="bi bi-hourglass-split" aria-hidden="true"></i> 14 dias gratis</span>
+          <span><i class="bi bi-credit-card-2-front" aria-hidden="true"></i> Sem cartao</span>
+          <span><i class="bi bi-lightning-charge" aria-hidden="true"></i> Ativacao imediata</span>
+        </div>
+
+        <?php
+          $basicoPlan = $publicPlans['basico'] ?? hfPublicPlanCatalogFallback()['basico'];
+          $profissionalPlan = $publicPlans['profissional'] ?? hfPublicPlanCatalogFallback()['profissional'];
+          $premiumPlan = $publicPlans['premium'] ?? hfPublicPlanCatalogFallback()['premium'];
+        ?>
+
         <div class="hf-plan-grid">
           <article class="hf-plan-card">
+            <span class="hf-plan-badge">14 dias gratis</span>
             <h3 class="hf-plan-name">B&aacute;sico</h3>
             <p class="hf-plan-description">Para pequenas assistencias que querem sair do improviso e organizar as OS.</p>
+            <div class="hf-plan-price-wrap" aria-label="Preco do plano Basico">
+              <div class="hf-plan-price-main">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$basicoPlan['monthly_cents']), ENT_QUOTES, 'UTF-8') ?>
+                <span>/mes</span>
+              </div>
+              <div class="hf-plan-price-annual">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$basicoPlan['annual_cents']), ENT_QUOTES, 'UTF-8') ?>/ano
+              </div>
+              <div class="hf-plan-savings">Economize 2 meses</div>
+            </div>
             <ul class="hf-plan-list">
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate 2 usuarios</li>
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> OS e clientes</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate <?= number_format((int)$basicoPlan['user_limit'], 0, ',', '.') ?> usuarios</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate <?= number_format((int)$basicoPlan['monthly_os_limit'], 0, ',', '.') ?> OS/mes</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Financeiro simples</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Sem cartao no trial</li>
             </ul>
-            <a class="btn hf-btn-secondary w-100" href="/cadastro.php?plano=basico">Testar B&aacute;sico</a>
+            <a class="btn hf-btn-secondary w-100" href="/cadastro.php?plano=basico">Come&ccedil;ar gr&aacute;tis por 14 dias</a>
           </article>
 
           <article class="hf-plan-card is-featured">
             <span class="hf-plan-badge">Recomendado</span>
             <h3 class="hf-plan-name">Profissional</h3>
             <p class="hf-plan-description">Para equipes que precisam controlar atendimento, financeiro e relatorios no dia a dia.</p>
+            <div class="hf-plan-price-wrap" aria-label="Preco do plano Profissional">
+              <div class="hf-plan-price-main">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$profissionalPlan['monthly_cents']), ENT_QUOTES, 'UTF-8') ?>
+                <span>/mes</span>
+              </div>
+              <div class="hf-plan-price-annual">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$profissionalPlan['annual_cents']), ENT_QUOTES, 'UTF-8') ?>/ano
+              </div>
+              <div class="hf-plan-savings">Economize 2 meses</div>
+            </div>
             <ul class="hf-plan-list">
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate 5 usuarios</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate <?= number_format((int)$profissionalPlan['user_limit'], 0, ',', '.') ?> usuarios</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate <?= number_format((int)$profissionalPlan['monthly_os_limit'], 0, ',', '.') ?> OS/mes</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Financeiro completo</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Relatorios e branding</li>
             </ul>
-            <a class="btn btn-primary hf-btn-primary w-100" href="/cadastro.php?plano=profissional">Testar Profissional</a>
+            <a class="btn btn-primary hf-btn-primary w-100" href="/cadastro.php?plano=profissional">Come&ccedil;ar gr&aacute;tis por 14 dias</a>
           </article>
 
-          <article class="hf-plan-card">
+          <article class="hf-plan-card is-premium">
+            <span class="hf-plan-badge is-premium">Premium</span>
             <h3 class="hf-plan-name">Premium</h3>
-            <p class="hf-plan-description">Para empresas que querem mais usuarios, suporte prioritario e personalizacao.</p>
+            <p class="hf-plan-description">Para operacoes que querem mais capacidade, imagem forte e atendimento prioritario.</p>
+            <div class="hf-plan-price-wrap" aria-label="Preco do plano Premium">
+              <div class="hf-plan-price-main">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$premiumPlan['monthly_cents']), ENT_QUOTES, 'UTF-8') ?>
+                <span>/mes</span>
+              </div>
+              <div class="hf-plan-price-annual">
+                <?= htmlspecialchars(hfPublicPlanMoney((int)$premiumPlan['annual_cents']), ENT_QUOTES, 'UTF-8') ?>/ano
+              </div>
+              <div class="hf-plan-savings">Economize 2 meses</div>
+            </div>
             <ul class="hf-plan-list">
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate 15 usuarios</li>
-              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Recursos avancados</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate <?= number_format((int)$premiumPlan['user_limit'], 0, ',', '.') ?> usuarios</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Ate <?= number_format((int)$premiumPlan['monthly_os_limit'], 0, ',', '.') ?> OS/mes</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Relatorios avancados</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Branding completo</li>
+              <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Dominio proprio (futuro)</li>
               <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Suporte prioritario</li>
             </ul>
-            <a class="btn hf-btn-secondary w-100" href="<?= htmlspecialchars($whatsappUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener">Falar sobre Premium</a>
+            <a class="btn hf-btn-secondary w-100" href="/cadastro.php?plano=premium">Testar agora</a>
           </article>
         </div>
       </div>

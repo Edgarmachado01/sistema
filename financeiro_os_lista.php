@@ -61,7 +61,7 @@ $sql = "
         f.cliente_id,
         f.data_os,
         f.data_vencimento,
-        f.valor_total,
+        o.total           AS valor_total,
 
         -- SEMPRE pega do registro da OS
         o.data_pagto       AS data_pagamento,
